@@ -1,0 +1,32 @@
+{
+  "name": "machkit",
+  "version": "1.0.0",
+  "description": "Takes a core dump of an iOS app running on macOS, locates the encrypted Mach-O regions, extracts them from memory, patches copies of the executables, and produces an IPA containing `Payload/*.app`.",
+  "private": true,
+  "type": "module",
+  "os": [
+    "darwin"
+  ],
+  "bin": {
+    "machkit": "./index.ts"
+  },
+  "scripts": {
+    "start": "bun run index.ts",
+    "clean:cores": "bun run scripts/clean-cores.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "python3 -B -m unittest discover -s tests -v && bun test",
+    "format": "prettier --ignore-path .prettierignore --write index.ts src scripts tests package.json tsconfig.json .prettierrc.json",
+    "format:check": "prettier --ignore-path .prettierignore --check index.ts src scripts tests package.json tsconfig.json .prettierrc.json"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.7.5"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "prettier": "^3.9.10",
+    "typescript": "^7"
+  },
+  "keywords": [],
+  "author": "Çayan K. <contact@cayan.dev>",
+  "license": "ISC"
+}
