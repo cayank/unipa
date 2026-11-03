@@ -2,6 +2,7 @@
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { version } from "./package.json";
 import { log, pack, resolveApp, selectApp, dumpCore, execute, cleanupRun, checkCatalystTools, createCatalystApp } from "./src";
 import { runMachO, type BundleInspection, type Recovery } from "./src/macho/run";
 
@@ -25,6 +26,7 @@ Options:
   --identity <name>           codesign identity (default: ad-hoc)
   --macos                     Also build a standalone Mac Catalyst .app (experimental)
   --no-sign                   Skip signing (patching invalidates the original signature)
+  --version                   Show version
   --help                      Show this help
 
 sudo is used only for gcore and for changing ownership of the core file.
@@ -55,12 +57,18 @@ function parseOptions() {
       "exclude-extension": { type: "string", multiple: true },
       "no-sign": { type: "boolean" },
       macos: { type: "boolean" },
+      version: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
   });
 
   if (values.help) {
     console.log(HELP_MESSAGE);
+    return;
+  }
+
+  if (values.version) {
+    console.log(`machkit ${version}`);
     return;
   }
 
@@ -184,14 +192,13 @@ async function getHostInfo() {
 }
 
 async function main() {
-  if (process.stdout.isTTY) console.clear();
-
   if (process.platform !== "darwin") {
     throw new Error("machkit is only supported on macOS.");
   }
 
   const options = parseOptions();
   if (!options) return;
+  if (process.stdout.isTTY) console.clear();
   if (options.macos) await checkCatalystTools();
 
   const host = await getHostInfo();

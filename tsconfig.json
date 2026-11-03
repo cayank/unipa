@@ -4,6 +4,7 @@
     "target": "ESNext",
     "module": "Preserve",
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "types": ["bun"],
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,

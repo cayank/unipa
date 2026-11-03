@@ -1,6 +1,6 @@
 {
   "name": "machkit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Takes a core dump of an iOS app running on macOS, locates the encrypted Mach-O regions, extracts them from memory, patches copies of the executables, and produces an IPA containing `Payload/*.app`.",
   "private": true,
   "type": "module",

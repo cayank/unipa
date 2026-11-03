@@ -31,6 +31,8 @@ bun link
 
 After that, `machkit` works from any directory. The link points to this checkout, so do not move the folder. `bun unlink` removes it.
 
+Check the installed version with `machkit --version`.
+
 ## Usage
 
 Run `machkit` with no arguments to pick an iOS App Store app from `/Applications/`, or pass the path yourself:
