@@ -14,9 +14,9 @@ Running iOS apps on a Mac and recovering their decrypted memory have different r
 | --- | --- |
 | Native support for compatible iPhone and iPad apps | Big Sur 11+ on Apple Silicon. Individual apps may require newer versions. |
 | Current live-dump method using the system `gcore` | Sequoia 15.0–15.2.x is the relevant window reported by the research. |
-| Tested with Machkit | macOS 15.0, build 24A8332, arm64. |
+| Tested with machkit | macOS 15.0, build 24A8332, arm64. |
 
-Apple introduced native iPhone and iPad app support with [Big Sur on Apple Silicon](https://developer.apple.com/videos/play/wwdc2020/10114/). For the current FairPlay recovery method, [FFRI's research](https://www.ffri.jp/wp-content/uploads/2026/01/gcore.pdf) documents the privileged `gcore` entitlement in macOS 15.0 and its removal in 15.3. This method should not be assumed to work on newer releases. The reported version window is not a claim that every release and app has been tested with Machkit.
+Apple introduced native iPhone and iPad app support with [Big Sur on Apple Silicon](https://developer.apple.com/videos/play/wwdc2020/10114/). For the current FairPlay recovery method, [FFRI's research](https://www.ffri.jp/wp-content/uploads/2026/01/gcore.pdf) documents the privileged `gcore` entitlement in macOS 15.0 and its removal in 15.3. This method should not be assumed to work on newer releases. The reported version window is not a claim that every release and app has been tested with machkit.
 
 The package is macOS-only (`os: ["darwin"]`), and the CLI rejects other operating systems before doing any work. It records the host's macOS version, build, and architecture under `host` in `source.json` and `manifest.json`, but does not enforce a macOS version cutoff. Successful startup does not establish live-dump compatibility. When using an existing core, `host` describes the current machine, which may differ from the dump's source.
 

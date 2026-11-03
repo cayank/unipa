@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { log, pack, resolveApp, selectApp, dumpCore, execute, cleanupRun } from "./src";
 import { runMachO, type BundleInspection, type Recovery } from "./src/macho/run";
 
-const HELP_MESSAGE = `Machkit: dump a running iOS app, recover its decrypted binaries, build an IPA
+const HELP_MESSAGE = `machkit: dump a running iOS app, recover its decrypted binaries, build an IPA
 
 Usage:
   machkit [options]
