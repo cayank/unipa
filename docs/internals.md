@@ -87,6 +87,9 @@ Messages use level labels (`[INFO]`, `[SUCCESS]`, `[WARN]`, `[ERROR]`). Warnings
 Run the development commands from the project directory:
 
 ```bash
+bun run format
+bun run format:check
+
 python3 -B src/macho/cli.py inspect --binary /path/to/executable
 python3 -B src/macho/cli.py analyze --binary /path/to/executable --core /path/to/app.core
 python3 -B src/macho/cli.py recover --binary /path/to/executable --core /path/to/app.core --output-dir /tmp/new-recovery

@@ -16,11 +16,11 @@ Creates an IPA from an iOS app running on macOS by recovering decrypted executab
 
 Running iOS apps and recovering their decrypted memory have different requirements:
 
-| Capability | macOS version |
-| --- | --- |
+| Capability                                         | macOS version                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------- |
 | Native support for compatible iPhone and iPad apps | Big Sur 11+ on Apple Silicon. Individual apps may require newer versions. |
-| Current live-dump method using the system `gcore` | Sequoia 15.0–15.2.x is the relevant window reported by the research. |
-| Tested with machkit | macOS 15.0, build 24A8332, arm64. |
+| Current live-dump method using the system `gcore`  | Sequoia 15.0–15.2.x is the relevant window reported by the research.      |
+| Tested with machkit                                | macOS 15.0, build 24A8332, arm64.                                         |
 
 Apple introduced native iOS app support with [Big Sur on Apple Silicon](https://developer.apple.com/videos/play/wwdc2020/10114/). [FFRI's research](https://www.ffri.jp/wp-content/uploads/2026/01/gcore.pdf) documents the privileged `gcore` entitlement in 15.0 and its removal in 15.3. The reported window has not been fully tested with machkit; do not assume live dumping works on newer releases.
 
