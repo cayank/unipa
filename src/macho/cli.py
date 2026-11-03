@@ -9,6 +9,7 @@ import stat
 import sys
 from pathlib import Path
 
+from catalyst import convert_bundle
 from reader import (
     FAT_MAGICS,
     MAGIC,
@@ -141,6 +142,11 @@ def parse_args() -> argparse.Namespace:
         bundle = commands.add_parser(command)
         bundle.add_argument("--app", type=Path, required=True)
 
+    macos = commands.add_parser("convert-macos")
+    macos.add_argument("--app", type=Path, required=True)
+    macos.add_argument("--output-dir", type=Path, required=True)
+    macos.add_argument("--identity", default="-")
+
     inspect = commands.add_parser("inspect")
     inspect.add_argument("--binary", type=Path, required=True)
 
@@ -164,6 +170,8 @@ def run_command(args: argparse.Namespace) -> dict:
         return bundle_info(args.app)
     if args.command == "inspect-bundle":
         return inspect_bundle(args.app)
+    if args.command == "convert-macos":
+        return convert_bundle(inspect_bundle(args.app), args.output_dir, args.identity)
     if args.command == "recover":
         return recover(args.binary, args.core, args.output_dir, args.base)
 

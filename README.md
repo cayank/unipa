@@ -1,30 +1,24 @@
 # machkit
 
-Creates an IPA from an iOS app running on macOS by recovering decrypted executable bytes from a core dump. The installed app stays unchanged.
+Takes a running iOS app on an Apple Silicon Mac, pulls its decrypted code out of a core dump, and builds an IPA from it. The installed app is never modified.
 
 > **Disclaimer:** machkit is provided "as is", without warranty. Use it at your own risk and only on apps you own or are authorized to analyze. To the extent permitted by applicable law, the authors and contributors accept no liability for damage, data loss, or other consequences of its use. You are responsible for how you use the tool and the files it produces.
 
 ## Requirements
 
-- Apple Silicon Mac (M1 or later)
-- A compatible macOS version (see [Compatibility](#compatibility))
-- Bun — required runtime; Node.js is not supported
-- Python 3.10+ — standard library only, no pip packages needed
+- Apple Silicon Mac
+- macOS 15.0 to 15.2 for live dumps (see [Compatibility](#compatibility))
+- Bun (Node.js is not supported)
+- Python 3.10+ (standard library only, no pip packages)
 - `gcore`, `ditto`, `codesign`, and `unzip`
 
 ## Compatibility
 
-Running iOS apps and recovering their decrypted memory have different requirements:
+iOS apps have run natively on Apple Silicon Macs since [Big Sur](https://developer.apple.com/videos/play/wwdc2020/10114/), though individual apps may need a newer macOS.
 
-| Capability                                         | macOS version                                                             |
-| -------------------------------------------------- | ------------------------------------------------------------------------- |
-| Native support for compatible iPhone and iPad apps | Big Sur 11+ on Apple Silicon. Individual apps may require newer versions. |
-| Current live-dump method using the system `gcore`  | Sequoia 15.0–15.2.x is the relevant window reported by the research.      |
-| Tested with machkit                                | macOS 15.0, build 24A8332, arm64.                                         |
+Dumping a live process is a separate matter. It relies on a privileged entitlement in the system `gcore`, which [FFRI's research](https://www.ffri.jp/wp-content/uploads/2026/01/gcore.pdf) found in macOS 15.0 and which was removed in 15.3. That points to 15.0 through 15.2 as the working window. Only 15.0 (build 24A8332) has been tested with machkit, so treat the other releases as unconfirmed.
 
-Apple introduced native iOS app support with [Big Sur on Apple Silicon](https://developer.apple.com/videos/play/wwdc2020/10114/). [FFRI's research](https://www.ffri.jp/wp-content/uploads/2026/01/gcore.pdf) documents the privileged `gcore` entitlement in 15.0 and its removal in 15.3. The reported window has not been fully tested with machkit; do not assume live dumping works on newer releases.
-
-machkit records the host OS version but does not enforce a version cutoff. Successful startup does not establish live-dump compatibility.
+machkit logs your macOS version but does not block any release. A successful startup does not mean the dump will work.
 
 ## Install
 
@@ -35,94 +29,89 @@ bun install
 bun link
 ```
 
-Then run `machkit` from any directory:
-
-```bash
-machkit --help
-machkit
-```
-
-`bun link` points to this checkout, so keep the project directory in place. Run `bun unlink` from the project directory to remove the link.
+After that, `machkit` works from any directory. The link points to this checkout, so do not move the folder. `bun unlink` removes it.
 
 ## Usage
 
-Run `machkit` to select an iOS App Store app under `/Applications/`, or pass its path directly. Both wrapped and plain iOS app bundles are supported.
+Run `machkit` with no arguments to pick an iOS App Store app from `/Applications/`, or pass the path yourself:
 
 ```bash
-machkit --app /Applications/Starbucks.app
-machkit --app /Applications/Starbucks.app --pid 12345 --wait-ms 5000
+machkit --app /Applications/Example.app
+machkit --app /Applications/Example.app --pid 12345 --wait-ms 5000
 ```
 
-An existing app process is reused; otherwise, machkit launches it. `--pid` selects a process, and `--wait-ms` sets the delay before dumping. Capturing a new core may prompt for your `sudo` password.
+If the app is already running, machkit uses that process. Otherwise it launches the app. `--pid` picks a specific process, and `--wait-ms` sets how long to wait before dumping. Taking a new core may ask for your `sudo` password.
 
-Running against an existing core lets you retry patching and packaging without launching the app:
+<!-- <a href="docs/cli-example.jpg">
+  <img src="docs/cli-example.jpg" alt="machkit recovering an app and producing an IPA" width="720">
+</a> -->
+
+To retry patching and packaging from a core you already have, no app launch needed:
 
 ```bash
-machkit --app /Applications/Starbucks.app --core /tmp/starbucks/starbucks.core
+machkit --app /Applications/Example.app --core /tmp/example.core
 ```
+
+### Mac app (experimental)
+
+`--macos` also produces a Mac Catalyst app that runs directly on your Mac:
+
+```bash
+machkit --app /Applications/Example.app --macos
+```
+
+```text
+output/Example-XXXXXX/
+├── Example-patched.ipa
+└── macos/
+    └── Example.app
+```
+
+It needs the Xcode Command Line Tools (`xcode-select --install`) and cannot be combined with `--no-sign` or `--keep-extensions`. See [macOS conversion](docs/catalyst.md) for details and known limits.
 
 ## Extensions
 
-By default, all `PlugIns/*.appex` directories are removed from the output copy and listed in `manifest.json`. Features provided by those extensions, such as notification processing, may be unavailable.
+App extensions (`PlugIns/*.appex`) are removed from the output by default and listed in `manifest.json`. Features that depend on them, such as notification handling, may not work.
 
-<details>
-<summary>Keep extensions or exclude specific ones</summary>
-
-Use `--keep-extensions` to preserve them. An encrypted extension may run in a separate process and need its own dump:
+To keep them, use `--keep-extensions`. An encrypted extension can run in its own process, so it may need a separate dump, which you pass with `--core-for`:
 
 ```bash
 machkit \
-  --app /Applications/Starbucks.app \
-  --core /tmp/starbucks/starbucks.core \
+  --app /Applications/Example.app \
+  --core /tmp/example.core \
   --keep-extensions \
-  --core-for 'PlugIns/NetmeraNotificationService.appex/NetmeraNotificationService=/tmp/notification.core'
+  --core-for 'PlugIns/NotificationService.appex/NotificationService=/tmp/notification.core'
 ```
 
-To keep other extensions while explicitly removing one:
-
-```bash
-machkit \
-  --app /Applications/Starbucks.app \
-  --core /tmp/starbucks/starbucks.core \
-  --keep-extensions \
-  --exclude-extension NetmeraNotificationService.appex
-```
-
-`--core-for` and `--exclude-extension` can be repeated. Packaging still stops if an encrypted executable remains in a preserved extension.
-
-</details>
+To keep most extensions but drop one, add `--exclude-extension NotificationService.appex` instead. Both flags can be repeated. If an encrypted executable is left in a kept extension, packaging stops.
 
 ## Output and signing
 
-Each run creates `output/machkit-XXXXXX/` containing `App-patched.ipa`, a patched app copy, and recovery reports. Use `--work-dir /path/to/dir` to change the parent folder. Failed runs keep their work folder for inspection.
+Each run creates a folder like `output/<app-name>-XXXXXX/` with the IPA, a patched copy of the app, and recovery reports. The prefix comes from the `.app` bundle name. Use `--work-dir` to change where it goes. If a run fails, the folder is kept so you can look at it.
 
-Signing is ad-hoc by default. Use `--identity 'Apple Development: …'` to choose an identity or `--no-sign` to skip signing. Patching invalidates the original signature. Only thin, little-endian 64-bit Mach-O is supported; FAT/universal and 32-bit binaries are rejected.
+Signing is ad-hoc by default. `--identity 'Apple Development: …'` picks a different identity, and `--no-sign` skips signing (patching breaks the original signature either way). Only thin, little-endian 64-bit Mach-O files are supported. FAT and 32-bit binaries are rejected.
 
 ## Installing the IPA
 
-You can use [Sideloadly](https://sideloadly.io/) to re-sign and install the IPA on a compatible device; follow its [instructions](https://sideloadly.io/faq).
-
-The default ad-hoc signature is not enough for installation on an iOS device. Signing, provisioning, entitlements, and device compatibility still apply. Generating an IPA does not guarantee it will install or run correctly.
+The ad-hoc signature is not enough to install on an iPhone or iPad. You will need to re-sign it, for example with [Sideloadly](https://sideloadly.io/) (see its [FAQ](https://sideloadly.io/faq)). Even then, an IPA that builds fine is not guaranteed to install or run.
 
 ## Cleanup
 
-After producing a verified IPA, machkit force-closes the app process used for the dump and deletes the core it generated. Failed recovery or packaging leaves the app and core available for inspection.
+Once everything passes verification, machkit force-quits the app process it dumped and deletes the core it created. If recovery, packaging, or the macOS conversion fails, both are left in place so you can investigate.
 
-Cores supplied through `--core` or `--core-for` are kept, and existing-core runs never launch or close an app.
+Cores you supply with `--core` or `--core-for` are never deleted, and runs that use an existing core never launch or close an app. If cleanup itself fails, the IPA is kept, the error is written to `manifest.json`, and the exit code is nonzero.
 
-Cleanup errors are recorded in `manifest.json`; the IPA is kept and the command exits with a nonzero status.
-
-From the project directory, preview or delete leftover core files from failed runs:
+To preview or remove cores left over from failed runs, from the project directory:
 
 ```bash
 bun run clean:cores --dry-run
 bun run clean:cores
-bun run clean:cores --work-dir /path/to/output   # custom output directory
+bun run clean:cores --work-dir /path/to/output
 ```
 
-The script removes only `machkit-*/process.core`, keeps other output files, and skips symlinks.
+Only regular `process.core` files directly inside recognized run folders are removed. App-named folders are checked against `source.json`; older run folders are also supported. Symlinks and all other output are left alone.
 
-For recovery details, report files, troubleshooting, and development commands, see [Internals](docs/internals.md).
+More on how recovery works, the report files, and development commands is in [Internals](docs/internals.md).
 
 ## License
 

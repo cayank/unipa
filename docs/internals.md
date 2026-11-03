@@ -1,18 +1,18 @@
 # machkit internals
 
-See the [README](../README.md) for requirements, compatibility, installation, and common usage.
+For requirements, compatibility, installation, and everyday usage, see the [README](../README.md).
 
-## Process selection
+## Finding the app and its process
 
-Apps are listed via `system_profiler`, and the executable name is read from `CFBundleExecutable`. Both the `Wrapper/*.app` layout and a plain iOS `.app` are supported.
+Apps are listed with `system_profiler`, and the executable name comes from `CFBundleExecutable`. Both the `Wrapper/*.app` layout and a plain iOS `.app` work.
 
-Process detection first checks the executable's canonical path. macOS can launch wrapped iOS apps from a relocated `/private/var/folders/.../d/Wrapper/` path. For a different path with the same executable name and size, the full SHA256 must match the selected app's executable. The verified runtime path is logged, and hashes are cached as long as file metadata is unchanged. Existing processes are reused; if none match, the app is launched.
+To find the running process, machkit first compares the executable's canonical path. macOS can launch wrapped iOS apps from a relocated `/private/var/folders/.../d/Wrapper/` path, so a different path is accepted only if the executable name and size match and the full SHA256 equals the selected app's executable. The verified runtime path is logged, and hashes are cached until the file metadata changes. A matching process is reused; if there is none, the app is launched.
 
 ## Recovery
 
-`src/macho/run.ts` calls the Python CLI (`src/macho/cli.py`), which handles commands and recovery files. `src/macho/reader.py` parses Mach-O files, reads core memory, and patches bytes.
+`src/macho/run.ts` calls the Python CLI (`src/macho/cli.py`), which handles the commands and recovery files. `src/macho/reader.py` parses Mach-O files, reads core memory, and patches bytes.
 
-`cryptoff` is a file offset. The tool looks for the segment that contains the **entire** encrypted range; it doesn't assume `__TEXT` only or a fixed base:
+`cryptoff` is a file offset. machkit looks for the segment that contains the **entire** encrypted range rather than assuming `__TEXT` or a fixed base:
 
 ```text
 preferred_header_address = header_segment.vmaddr - header_segment.fileoff
@@ -21,79 +21,96 @@ encrypted_memory_address = slide + encrypted_segment.vmaddr
                          + cryptoff - encrypted_segment.fileoff
 ```
 
-For `SG_HIGHVM` segments, the mapping of stored bytes to the high end of the segment is handled separately. Apple's [Mach-O definitions](https://github.com/apple-oss-distributions/xnu/blob/main/EXTERNAL_HEADERS/mach-o/loader.h) are the reference for the file layout.
+`SG_HIGHVM` segments are handled separately, since their stored bytes map to the high end of the segment. Apple's [Mach-O definitions](https://github.com/apple-oss-distributions/xnu/blob/main/EXTERNAL_HEADERS/mach-o/loader.h) are the reference for the file layout.
 
-The core is opened with `mmap`. Headers are searched for inside core segments, not just at segment starts. The runtime header's `cryptid` may differ; all other header and load command bytes must match. Samples taken from unencrypted instruction sections are also compared against the code on disk, which filters out mappings that share the same header but are not the runtime image. Samples of plaintext code modified by hooks can be rejected as well.
+The core is opened with `mmap`, and headers are searched for inside core segments, not only at segment starts. A runtime header may have a different `cryptid`, but every other header and load command byte must match. Samples from unencrypted instruction sections are also compared with the code on disk. This filters out mappings that share the same header but are not the runtime image, and it can reject code modified by hooks.
 
-Missing core pages are not zero-filled; reads continue across adjacent segments. Candidates that are identical to disk, entirely zero, or that fail the plaintext code check are discarded.
+Missing core pages are never zero-filled; reads continue across adjacent segments. Candidates are discarded if they are identical to disk, entirely zero, or fail the plaintext code check.
 
-### Selecting a runtime base
+### Choosing a base
 
-If more than one valid candidate remains, the run stops. Inspect `recovery/000/analysis.json` in the work folder, then select a base explicitly:
+If more than one valid candidate remains, the run stops. Look at `recovery/000/analysis.json` in the work folder, then pick one explicitly:
 
 ```bash
 machkit \
-  --app /Applications/Starbucks.app \
-  --core /tmp/starbucks/starbucks.core \
+  --app /Applications/Example.app \
+  --core /tmp/example.core \
   --base 0x102e1c000
 ```
 
-The address above is an example; use a valid candidate from your own report. `--base` doesn't skip any checks; it only selects among the valid candidates. If no usable candidate exists, selecting a base will not bypass validation. A difference between disk and RAM is not, by itself, cryptographic proof that the plaintext is correct.
+The address is only an example; use one from your own report. `--base` chooses among valid candidates and does not skip any checks. Note that a difference between disk and RAM is not cryptographic proof that the plaintext is correct.
 
-### Patching and validation
+### Patching
 
-The patch changes only the `cryptoff..cryptoff+cryptsize` range and the `cryptid` field in the encryption command. The result is re-read and verified. The source app is untouched. Before packaging, all Mach-O files are rescanned; if any encrypted executable remains, no IPA is produced.
+The patch changes only the `cryptoff..cryptoff+cryptsize` range and the `cryptid` field in the encryption command. The result is read back and verified, and the source app is never touched. Before packaging, every Mach-O file is scanned again, and if any encrypted executable is left, no IPA is produced.
 
-Only thin, little-endian 64-bit Mach-O is supported. FAT/universal and 32-bit inputs are rejected with an explicit error; another architecture is never silently selected. The encrypted range must lie within a single executable segment, though in the core it may span several adjacent segments.
+Only thin, little-endian 64-bit Mach-O is supported. FAT/universal and 32-bit files fail with an explicit error, and no other architecture is ever picked silently. The encrypted range must sit inside a single executable segment, though in the core it may span several adjacent ones.
 
 ## Output files
 
-Each run creates a new folder under `output/machkit-XXXXXX/`. Use `--work-dir /path/to/dir` to change the parent folder.
+Each run creates a new folder under `output/<app-name>-XXXXXX/`, using the `.app` bundle name followed by a random suffix. Use `--work-dir` to change the parent folder.
 
 ```text
-Payload/App.app/                Patched copy, signed unless disabled
-process.core                    Kept if the run fails; deleted after a verified IPA is created
-source.json                     Source bundle and Mach-O inventory
-recovery/000/analysis.json      All base candidates and comparison results
-recovery/000/region.bin         Extracted cryptsize bytes (full range)
-recovery/000/executable.patched Patch result before signing
-recovery/000/result.json        Selected candidate and hashes
-manifest.json                   Summary of a successful run; excluded extensions
-App-patched.ipa                 Verified ZIP containing only Payload
+Payload/App.app/                 Patched copy, signed unless disabled
+process.core                     Kept if the run fails; deleted after a verified IPA is created
+source.json                      Source bundle and Mach-O inventory
+recovery/000/analysis.json       All base candidates and comparison results
+recovery/000/region.bin          Extracted bytes (full cryptsize range)
+recovery/000/executable.patched  Patch result before signing
+recovery/000/result.json         Selected candidate and hashes
+manifest.json                    Summary of a successful run, including excluded extensions
+App-patched.ipa                  Verified ZIP containing only Payload
 ```
 
-On failure, the work folder is kept for inspection. If the base is ambiguous or missing, `analysis.json` will be present. Python outputs never overwrite existing files; use a new recovery folder to retry.
+Failed runs keep their work folder. If the base is ambiguous or missing, `analysis.json` is there to explain why. Python outputs never overwrite existing files, so use a new recovery folder to retry.
 
-The package is macOS-only (`os: ["darwin"]`), and the CLI rejects other operating systems before doing any work. It records the host's macOS version, build, and architecture under `host` in `source.json` and `manifest.json`, but does not enforce a macOS version cutoff. When using an existing core, `host` describes the current machine, which may differ from the dump's source. See [Compatibility](../README.md#compatibility) for the live-dump version restrictions.
+machkit is macOS-only (`os: ["darwin"]`) and exits on any other system before doing any work. The host's macOS version, build, and architecture are saved under `host` in `source.json` and `manifest.json`, but no version cutoff is enforced. With an existing core, `host` describes the current machine, which may not be where the dump came from. For live-dump version limits, see [Compatibility](../README.md#compatibility).
 
 ## Signing and permissions
 
-The default signature is ad-hoc (`codesign --force --deep --sign -`), followed by `codesign --verify --deep --strict`. Use `--identity 'Apple Development: …'` to pick a signing identity. `--no-sign` only skips signing; patching invalidates the original signature. Provisioning and entitlements are outside the scope of this tool.
+The default signature is ad-hoc (`codesign --force --deep --sign -`), followed by `codesign --verify --deep --strict`. Use `--identity 'Apple Development: …'` to pick another identity. `--no-sign` only skips signing, and patching invalidates the original signature either way. Provisioning and entitlements are outside the scope of this tool.
 
-Taking a new core may prompt for the `sudo` password. Only `gcore` and the `chown` that hands ownership of the core to the current user run under sudo. The work folder is created with `0700`, and the core and reports with `0600`.
+Taking a new core may ask for your `sudo` password. Only `gcore` and the `chown` that gives you ownership of the core run under sudo. The work folder is created with `0700`, and the core and reports with `0600`.
+
+## macOS conversion
+
+The Mac Catalyst app, window size, signing, and conversion reports are covered in [macOS conversion](catalyst.md).
 
 ## Cleanup
 
-After the IPA passes signing and archive checks, machkit sends `SIGKILL` to the exact PID used for the dump, after verifying that it still runs the selected executable. It then deletes the core generated by that run. If recovery or packaging fails, the app and core are left available for inspection.
+After the IPA passes signing and archive checks (and the macOS conversion succeeds, if requested), machkit confirms the dumped process still runs the selected executable, then sends `SIGKILL` to that exact PID and deletes the core from that run. If recovery or packaging fails, the app and core stay in place.
 
-Cores supplied through `--core` or `--core-for` are kept, and existing-core runs never launch or close an app. Cleanup results are recorded in `manifest.json`. If cleanup fails, the verified IPA is kept, a warning is shown, and the command exits with a nonzero status.
+Cores passed with `--core` or `--core-for` are never deleted, and runs with an existing core never launch or close an app. Cleanup results are saved in `manifest.json`. If cleanup fails, the verified IPA is kept, a warning is shown, and the exit code is nonzero.
 
-The [cleanup script](../scripts/clean-cores.ts) removes only `machkit-*/process.core` under the selected output directory. It keeps IPAs, copied apps, extracted regions, and reports, and skips symlinks. Unreadable runs are reported without stopping cleanup of the others. See the [README commands](../README.md#cleanup) to preview or delete leftover cores.
+The [cleanup script](../scripts/clean-cores.ts) removes only regular `process.core` files directly inside recognized run folders under the chosen output directory. For app-named folders, the prefix must match the source app in a regular `source.json` file and the suffix must contain six letters or digits. Older run folders are also supported. It leaves IPAs, app copies, extracted regions, and reports alone, skips symlinks, and reports unreadable runs without stopping on them. The commands are in the [README](../README.md#cleanup).
 
 ## Development
 
-Messages use level labels (`[INFO]`, `[SUCCESS]`, `[WARN]`, `[ERROR]`). Warnings and errors go to stderr; everything else goes to stdout. Colors are omitted when output is redirected; set `NO_COLOR=1` to disable them or `FORCE_COLOR=1` to force them.
+Log lines use the labels `[INFO]`, `[SUCCESS]`, `[WARN]`, and `[ERROR]`. Warnings and errors go to stderr, everything else to stdout. Colors are off when output is redirected; set `NO_COLOR=1` to disable them or `FORCE_COLOR=1` to force them.
 
-Run the development commands from the project directory:
+From the project directory:
 
 ```bash
 bun run format
 bun run format:check
+bun run typecheck
+bun run test    # Bun and Python tests together
+```
 
+The two test suites can also be run separately:
+
+```bash
+bun test
+python3 -B -m unittest discover -s tests -v
+```
+
+The Python backend can be run on its own:
+
+```bash
 python3 -B src/macho/cli.py inspect --binary /path/to/executable
 python3 -B src/macho/cli.py analyze --binary /path/to/executable --core /path/to/app.core
 python3 -B src/macho/cli.py recover --binary /path/to/executable --core /path/to/app.core --output-dir /tmp/new-recovery
 python3 -B src/macho/cli.py patch --binary /path/to/executable --region /tmp/new-recovery/region.bin --output /tmp/new-executable
 ```
 
-`MACHKIT_PYTHON=/path/to/python3` selects the Python interpreter. The tests generate synthetic Mach-O files and cores; they do not launch a real app or use `sudo`. The macOS integration tests use `xcrun clang`, `codesign`, `ditto`, and `unzip`.
+`MACHKIT_PYTHON=/path/to/python3` selects the Python interpreter. The tests use synthetic Mach-O files and cores, so they never launch a real app or use `sudo`. The macOS integration tests rely on `xcrun clang`, `codesign`, `ditto`, and `unzip`.

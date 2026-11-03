@@ -2,29 +2,30 @@
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { log, pack, resolveApp, selectApp, dumpCore, execute, cleanupRun } from "./src";
+import { log, pack, resolveApp, selectApp, dumpCore, execute, cleanupRun, checkCatalystTools, createCatalystApp } from "./src";
 import { runMachO, type BundleInspection, type Recovery } from "./src/macho/run";
 
 const HELP_MESSAGE = `machkit: dump a running iOS app, recover its decrypted binaries, build an IPA
 
 Usage:
   machkit [options]
-  machkit --app /Applications/Starbucks.app
-  machkit --app /Applications/Starbucks.app --core /tmp/starbucks.core
+  machkit --app /Applications/Example.app
+  machkit --app /Applications/Example.app --core /tmp/example.core
 
 Options:
-  --app <path>             App to process (default: choose from a list)
-  --pid <pid>              Use an existing process of the selected app
-  --core <file>            Use an existing core instead of taking a new dump
-  --wait-ms <ms>           Delay before dumping (default: 2000)
-  --work-dir <dir>         Parent directory for runs (default: ./output)
-  --base <0xaddress>       Select one verified runtime base for the main executable
-  --core-for <path=core>   Core for another binary in the bundle (repeatable)
-  --keep-extensions        Keep PlugIns/*.appex (default: removed from the output)
-  --exclude-extension <n>  Remove one extension, e.g. Name.appex (repeatable)
-  --identity <name>        codesign identity (default: ad-hoc)
-  --no-sign                Skip signing (patching invalidates the original signature)
-  --help                   Show this help
+  --app <path>                Reference app to process (default: choose from a list)
+  --pid <pid>                 Use an existing process of the selected app
+  --core <file>               Use an existing core instead of taking a new dump
+  --wait-ms <ms>              Delay before dumping (default: 2000)
+  --work-dir <dir>            Parent directory for runs (default: ./output)
+  --base <0xaddress>          Select one verified runtime base for the main executable
+  --core-for <path=core>      Core for another binary in the bundle (repeatable)
+  --keep-extensions           Keep PlugIns/*.appex (default: removed from the output)
+  --exclude-extension <name>  Remove one extension, e.g. Name.appex (repeatable)
+  --identity <name>           codesign identity (default: ad-hoc)
+  --macos                     Also build a standalone Mac Catalyst .app (experimental)
+  --no-sign                   Skip signing (patching invalidates the original signature)
+  --help                      Show this help
 
 sudo is used only for gcore and for changing ownership of the core file.
 macOS only. Requires Python 3.10+. Set MACHKIT_PYTHON to choose the interpreter.
@@ -53,6 +54,7 @@ function parseOptions() {
       "keep-extensions": { type: "boolean" },
       "exclude-extension": { type: "string", multiple: true },
       "no-sign": { type: "boolean" },
+      macos: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -68,6 +70,8 @@ function parseOptions() {
   if (values.core && pid !== undefined) throw new Error("--core and --pid cannot be combined");
   if (values.base && !/^(0x[0-9a-f]+|\d+)$/i.test(values.base)) throw new Error("--base must be a valid address");
   if (values["no-sign"] && values.identity) throw new Error("--no-sign and --identity cannot be combined");
+  if (values.macos && values["no-sign"]) throw new Error("--macos requires signing; remove --no-sign");
+  if (values.macos && values["keep-extensions"]) throw new Error("--macos does not support retained iOS extensions; remove --keep-extensions");
 
   return {
     appPath: values.app,
@@ -77,6 +81,7 @@ function parseOptions() {
     workDir: values["work-dir"] ?? path.join(import.meta.dir, "output"),
     base: values.base,
     identity: values["no-sign"] ? undefined : (values.identity ?? "-"),
+    macos: values.macos ?? false,
     keepExtensions: values["keep-extensions"] ?? false,
     excludedExtensions: values["exclude-extension"] ?? [],
     coreOverrides: values["core-for"] ?? [],
@@ -162,7 +167,8 @@ async function createWorkspace(selected: string, sourcePath: string, workDir: st
   outputRoot = path.join(ancestor, ...missing);
   if (insideSource(outputRoot)) throw new Error("Working directory resolves inside the source .app");
   await mkdir(outputRoot, { recursive: true, mode: 0o700 });
-  const workspace = await mkdtemp(path.join(outputRoot, "machkit-"));
+  const appName = path.basename(sourcePath, ".app");
+  const workspace = await mkdtemp(path.join(outputRoot, `${appName}-`));
   await chmod(workspace, 0o700);
   return workspace;
 }
@@ -186,6 +192,7 @@ async function main() {
 
   const options = parseOptions();
   if (!options) return;
+  if (options.macos) await checkCatalystTools();
 
   const host = await getHostInfo();
   log.info(`Host: macOS ${host.version} (${host.build}), ${host.arch}`);
@@ -268,6 +275,12 @@ async function main() {
 
   const identity = options.identity;
   const ipa = await pack(app, workspace, identity);
+  let macos = null;
+  if (options.macos) {
+    log.info("Converting a separate copy to Mac Catalyst…");
+    macos = await createCatalystApp(app, path.join(workspace, "macos"), identity!);
+    log.success(`Prepared and signed ${macos.binaries.length} binaries`);
+  }
   const cleanup = await cleanupRun({ executable: source.executable, pid: dumpPid, generatedCore });
   await writeFile(
     path.join(workspace, "manifest.json"),
@@ -286,6 +299,7 @@ async function main() {
         excluded_extensions: excluded,
         identity: identity ?? null,
         ipa,
+        macos,
         created_at: new Date().toISOString(),
       },
       null,
@@ -295,6 +309,7 @@ async function main() {
   );
   if (cleanup.errors.length > 0) process.exitCode = 1;
   log.success(`IPA ready: ${ipa}`);
+  if (macos) log.success(`macOS app ready: ${macos.app}`);
 }
 
 if (import.meta.main) {

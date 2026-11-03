@@ -1,4 +1,4 @@
-import { lstat, readdir, unlink } from "node:fs/promises";
+import { lstat, readFile, readdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { log } from "../src/logger";
@@ -10,8 +10,28 @@ Usage:
   bun run clean:cores --dry-run
   bun run clean:cores --work-dir /path/to/output
 
-Only regular files matching machkit-*/process.core are removed.
+Only regular process.core files directly inside recognized run folders are removed.
 Symlinks are skipped. The default directory is this project's output folder.`;
+
+async function isAppRun(folder: string): Promise<boolean> {
+  const name = path.basename(folder);
+  if (!/^.+-[A-Za-z0-9]{6}$/.test(name)) return false;
+
+  const sourceFile = path.join(folder, "source.json");
+  if (!(await lstat(sourceFile)).isFile()) return false;
+
+  let source;
+  try {
+    source = JSON.parse(await readFile(sourceFile, "utf-8"));
+  } catch (error) {
+    if (error instanceof SyntaxError) return false;
+    throw error;
+  }
+
+  if (typeof source?.path !== "string") return false;
+  const prefix = `${path.basename(source.path, ".app")}-`;
+  return name.startsWith(prefix) && /^[A-Za-z0-9]{6}$/.test(name.slice(prefix.length));
+}
 
 function formatSize(bytes: number): string {
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
@@ -61,10 +81,12 @@ async function main(): Promise<void> {
   const action = dryRun ? "Would delete" : "Deleted";
 
   for (const folder of runFolders) {
-    if (!folder.isDirectory() || !folder.name.startsWith("machkit-")) continue;
+    if (!folder.isDirectory()) continue;
 
-    const corePath = path.join(outputDir, folder.name, "process.core");
+    const runPath = path.join(outputDir, folder.name);
+    const corePath = path.join(runPath, "process.core");
     try {
+      if (!folder.name.startsWith("machkit-") && !(await isAppRun(runPath))) continue;
       const info = await lstat(corePath);
       if (!info.isFile()) continue;
 
