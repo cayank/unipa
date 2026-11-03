@@ -37,10 +37,8 @@ SEGMENT64_SIZE = 72
 SECTION64_SIZE = 80
 MAX_LOAD_COMMAND_BYTES = 64 * 1024 * 1024
 
-
 class MachOError(ValueError):
     pass
-
 
 @dataclass(frozen=True)
 class Segment:
@@ -57,14 +55,12 @@ class Segment:
             return self.vmaddr + self.vmsize - self.filesize
         return self.vmaddr
 
-
 @dataclass(frozen=True)
 class Encryption:
     cryptoff: int
     cryptsize: int
     cryptid: int
     id_offset: int
-
 
 class MachO:
     def __init__(self, data):
@@ -73,11 +69,13 @@ class MachO:
             raise MachOError(
                 "Universal/FAT Mach-O is unsupported; supply a thin 64-bit executable"
             )
+
         if len(data) < MACH_HEADER_SIZE or data[:4] != MAGIC:
             raise MachOError("Expected a little-endian 64-bit Mach-O")
         _, self.cpu, self.subtype, self.filetype, ncmds, sizeofcmds, _, _ = (
             struct.unpack_from("<8I", data)
         )
+
         self.header_size = MACH_HEADER_SIZE + sizeofcmds
         if (
             self.header_size > len(data)
@@ -85,21 +83,26 @@ class MachO:
             or ncmds > sizeofcmds // 8
         ):
             raise MachOError("Invalid or truncated load command table")
+
         self.segments: list[Segment] = []
         self.instruction_ranges: list[tuple[int, int]] = []
         self.encryption: Encryption | None = None
         cursor = MACH_HEADER_SIZE
+
         for _ in range(ncmds):
             if cursor + 8 > self.header_size:
                 raise MachOError("Truncated load command")
+
             cmd, size = struct.unpack_from("<II", data, cursor)
             if size < 8 or size % 8 or cursor + size > self.header_size:
                 raise MachOError("Invalid load command size")
+
             if cmd == LC_SEGMENT_64:
                 self._read_segment(cursor, size)
             elif cmd in (LC_ENCRYPTION_INFO, LC_ENCRYPTION_INFO_64):
                 self._read_encryption(cursor, size, cmd)
             cursor += size
+
         if cursor != self.header_size:
             raise MachOError("Load command count and size disagree")
 
@@ -127,6 +130,7 @@ class MachO:
                 flags,
             )
         )
+
         for index in range(nsects):
             section_offset = offset + SEGMENT64_SIZE + index * SECTION64_SIZE
             section = struct.unpack_from("<16s16sQQIIIIIIII", self.data, section_offset)
@@ -135,10 +139,13 @@ class MachO:
                 section[4],
                 section[8],
             )
+
             if not section_size or not section_flags & INSTRUCTION_ATTRIBUTES:
                 continue
+
             if file_offset < fileoff or file_offset + section_size > fileoff + filesize:
                 raise MachOError("Instruction section exceeds stored segment")
+
             self.instruction_ranges.append((file_offset, section_size))
 
     def _read_encryption(self, offset: int, size: int, command: int) -> None:
@@ -149,6 +156,7 @@ class MachO:
         cryptoff, cryptsize, cryptid = struct.unpack_from("<III", self.data, offset + 8)
         if cryptoff + cryptsize > len(self.data):
             raise MachOError("Encrypted range exceeds executable")
+
         self.encryption = Encryption(cryptoff, cryptsize, cryptid, offset + 16)
 
     def segment_for_file_range(self, offset: int, size: int) -> Segment:
@@ -163,6 +171,7 @@ class MachO:
             raise MachOError(
                 "File range must be contained in exactly one stored segment"
             )
+
         return matches[0]
 
     @property
@@ -187,6 +196,7 @@ class MachO:
                 "cryptid": self.encryption.cryptid,
                 "cryptid_offset": self.encryption.id_offset,
             }
+
         return {
             "cpu": hex(self.cpu),
             "filetype": self.filetype,
@@ -204,7 +214,6 @@ class MachO:
             ],
         }
 
-
 class Core:
     def __init__(self, path: Path):
         self._resources = ExitStack()
@@ -212,12 +221,15 @@ class Core:
             self.file = self._resources.enter_context(path.open("rb"))
             if not path.stat().st_size:
                 raise MachOError("Empty core dump")
+
             self.data = self._resources.enter_context(
                 mmap.mmap(self.file.fileno(), 0, access=mmap.ACCESS_READ)
             )
+
             self.macho = MachO(self.data)
             if self.macho.filetype != MH_CORE:
                 raise MachOError("Input is not a Mach-O core dump (MH_CORE)")
+
             self.segments = sorted(
                 (segment for segment in self.macho.segments if segment.filesize),
                 key=lambda segment: segment.stored_vmaddr,
@@ -259,6 +271,7 @@ class Core:
     def find_bases(self, original: MachO) -> list[int]:
         if (self.macho.cpu, self.macho.subtype) != (original.cpu, original.subtype):
             raise MachOError("Core and executable CPU types/subtypes differ")
+
         reference = original.normalized_header()
         bases = set()
         for segment in self.segments:
@@ -267,6 +280,7 @@ class Core:
                 found = self.data.find(MAGIC, start, end)
                 if found == -1:
                     break
+
                 address = segment.stored_vmaddr + found - segment.fileoff
                 try:
                     header = self.read(address, original.header_size)
@@ -280,7 +294,6 @@ class Core:
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
 
 def _clear_instruction_samples(
     original: MachO, encryption: Encryption
@@ -299,13 +312,14 @@ def _clear_instruction_samples(
         for start, end in intervals:
             if end <= start:
                 continue
+
             length = min(64, end - start)
+
             for position in sorted({start, end - length}):
                 segment = original.segment_for_file_range(position, length)
                 address = segment.stored_vmaddr + position - segment.fileoff
                 samples.append((address, original.data[position : position + length]))
     return samples
-
 
 def analyze(core: Core, original: MachO) -> dict:
     encryption = original.encryption
@@ -313,6 +327,7 @@ def analyze(core: Core, original: MachO) -> dict:
         raise MachOError(
             "Executable is already unencrypted or has no encryption command"
         )
+
     if encryption.cryptsize == 0 or encryption.cryptoff < original.header_size:
         raise MachOError("Empty encrypted range or range overlaps load commands")
 
@@ -374,6 +389,7 @@ def choose_candidate(report: dict, base: int | None = None) -> dict:
         for candidate in report["candidates"]
         if candidate["usable"] and (base is None or int(candidate["base"], 16) == base)
     ]
+
     if len(candidates) != 1:
         raise MachOError(
             f"Expected one usable runtime base, found {len(candidates)}; "
@@ -381,18 +397,20 @@ def choose_candidate(report: dict, base: int | None = None) -> dict:
         )
     return candidates[0]
 
-
 def patch_bytes(original: bytes, region: bytes) -> bytes:
     binary = MachO(original)
     encryption = binary.encryption
     if not encryption or encryption.cryptid == 0 or encryption.cryptsize == 0:
         raise MachOError("Expected a nonempty encrypted executable")
+
     if len(region) != encryption.cryptsize:
         raise MachOError(
             f"Region length {len(region)} != cryptsize {encryption.cryptsize}"
         )
+
     if encryption.cryptoff < binary.header_size:
         raise MachOError("Encrypted range overlaps load commands")
+
     binary.segment_for_file_range(encryption.cryptoff, encryption.cryptsize)
 
     start = encryption.cryptoff
@@ -412,4 +430,5 @@ def patch_bytes(original: bytes, region: bytes) -> bytes:
         or patched_binary.encryption.cryptid != 0
     ):
         raise MachOError("Patched executable verification failed")
+
     return result
