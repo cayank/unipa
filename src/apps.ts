@@ -29,10 +29,13 @@ export async function selectApp(): Promise<string> {
 
   return select({
     message: "Which app should be packaged as an IPA?",
-    choices: [new Separator(), ...apps.map((app) => ({
-      name: `${app._name} | ${app.path}`,
-      value: app.path,
-    })),]
+    choices: [
+      new Separator(),
+      ...apps.map((app) => ({
+        name: `${app._name} | ${app.path}`,
+        value: app.path,
+      })),
+    ],
   });
 }
 

@@ -15,7 +15,7 @@ Symlinks are skipped. The default directory is this project's output folder.`;
 
 function formatSize(bytes: number): string {
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  
+
   let unit = 0;
   while (bytes >= 1024 && unit < units.length - 1) {
     bytes /= 1024;
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
 
   const outputDir = path.resolve(options["work-dir"] ?? path.join(import.meta.dir, "../output"));
   const dryRun = options["dry-run"] ?? false;
-  
+
   let runFolders;
   try {
     runFolders = await readdir(outputDir, { withFileTypes: true });
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
   if (fileCount > 0) {
     const label = fileCount === 1 ? "core file" : "core files";
     const summary = `${fileCount} ${label}, ${formatSize(totalBytes)}`;
-    
+
     if (dryRun) {
       log.info(`Dry run: ${summary}. No files deleted.`);
     } else {

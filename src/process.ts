@@ -140,7 +140,7 @@ export async function forceCloseApp(executable: string, pid: number): Promise<bo
       if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
       throw error;
     }
-    
+
     throw new Error(`Refusing to close PID ${pid}: it no longer runs the selected app`);
   }
 
