@@ -21,7 +21,6 @@ export async function cleanupRun({ executable, pid, generatedCore }: CleanupOpti
     try {
       const killed = await forceCloseApp(executable, pid);
       result.appClosed = true;
-
       killed ? log.success(`Force-closed app (PID ${pid})`) : log.info(`App already closed (PID ${pid})`);
     } catch (error) {
       result.appClosed = false;
@@ -35,7 +34,6 @@ export async function cleanupRun({ executable, pid, generatedCore }: CleanupOpti
     try {
       await unlink(generatedCore);
       result.coreDeleted = true;
-
       log.success(`Deleted core dump: ${generatedCore}`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
