@@ -115,4 +115,4 @@ More on how recovery works, the report files, and development commands is in [In
 
 ## License
 
-Licensed under the [ISC License](LICENSE).
+Licensed under the [MIT License](LICENSE).
