@@ -176,7 +176,7 @@ async function createWorkspace(selected: string, sourcePath: string, workDir: st
   if (insideSource(outputRoot)) throw new Error("Working directory resolves inside the source .app");
   await mkdir(outputRoot, { recursive: true, mode: 0o700 });
   const appName = path.basename(sourcePath, ".app");
-  const workspace = await mkdtemp(path.join(outputRoot, `${appName}-`));
+  const workspace = await mkdtemp(path.join(outputRoot, `${appName.toLowerCase()}-`));
   await chmod(workspace, 0o700);
   return workspace;
 }
