@@ -6,21 +6,18 @@ import json
 import os
 import plistlib
 import shutil
-import struct
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from entitlements import compatibility_sandbox, macos_entitlements
 from reader import MachO, MachOError
+from load_commands import add_dylibs, build_platform, dylib_names
 
 ARM64 = 0x100000C
 MACOS = 1
 IOS = 2
 MAC_CATALYST = 6
-LC_BUILD_VERSION = 0x32
-VERSION_COMMANDS = {0x24: MACOS, 0x25: IOS}
-DYLIB_COMMANDS = {0xC, 0x80000018, 0x8000001F, 0x80000023}
 SWIFT_UIKIT = "@rpath/libswiftUIKit.dylib"
 CATALYST_SWIFT_UIKIT = "/System/iOSSupport/usr/lib/swift/libswiftUIKit.dylib"
 RUNTIME_LIBRARY = "@executable_path/Frameworks/UnipaRuntime.dylib"
@@ -36,44 +33,19 @@ def inspect_binary(path: Path, app: Path) -> Binary:
     binary = MachO(data)
     if binary.cpu != ARM64:
         raise MachOError(f"Mac Catalyst conversion requires arm64: {path}")
+
     if binary.encryption and binary.encryption.cryptid:
         raise MachOError(f"Decrypt the binary before macOS conversion: {path}")
 
-    platforms = []
-    fix_swift_uikit = False
-    offset = 32
-    while offset < binary.header_size:
-        command, size = struct.unpack_from("<II", data, offset)
-        if command == LC_BUILD_VERSION:
-            if size < 24:
-                raise MachOError(f"Truncated LC_BUILD_VERSION: {path}")
-            platform, _, _, tools = struct.unpack_from("<4I", data, offset + 8)
+    try:
+        platform = build_platform(binary)
+        libraries = dylib_names(binary)
+    except MachOError as error:
+        raise MachOError(f"{path}: {error}") from error
 
-            if 24 + tools * 8 > size:
-                raise MachOError(f"Truncated build tool table: {path}")
-            platforms.append(platform)
-        elif command in VERSION_COMMANDS:
-            if size < 16:
-                raise MachOError(f"Truncated minimum OS command: {path}")
-            
-            platforms.append(VERSION_COMMANDS[command])
-        elif command in DYLIB_COMMANDS:
-            if size < 24:
-                raise MachOError(f"Truncated dylib command: {path}")
-            
-            start = struct.unpack_from("<I", data, offset + 8)[0]
-            if not 24 <= start < size:
-                raise MachOError(f"Invalid dylib name offset: {path}")
-            
-            name = data[offset + start : offset + size]
-            if b"\0" not in name:
-                raise MachOError(f"Unterminated dylib name: {path}")
-            fix_swift_uikit |= name.split(b"\0", 1)[0] == SWIFT_UIKIT.encode()
-        offset += size
-
-    if len(platforms) != 1 or platforms[0] not in (MACOS, IOS, MAC_CATALYST):
-        raise MachOError(f"Unsupported or missing build platform {platforms}: {path}")
-    return Binary(path.relative_to(app), platforms[0], fix_swift_uikit)
+    if platform not in (MACOS, IOS, MAC_CATALYST):
+        raise MachOError(f"Unsupported build platform {platform}: {path}")
+    return Binary(path.relative_to(app), platform, SWIFT_UIKIT in libraries)
 
 def run_tool(*arguments: str) -> str:
     result = subprocess.run(arguments, check=False, capture_output=True, text=True)
@@ -128,42 +100,8 @@ def add_runtime_hooks(executable: Path, app: Path) -> Binary:
         str(library),
     )
 
-    link_runtime_hooks(executable)
+    executable.write_bytes(add_dylibs(executable.read_bytes(), [RUNTIME_LIBRARY]))
     return inspect_binary(library, app)
-
-def link_runtime_hooks(executable: Path) -> None:
-    data = bytearray(executable.read_bytes())
-    binary = MachO(data)
-    content_offsets = []
-    offset = 32
-    while offset < binary.header_size:
-        command, size = struct.unpack_from("<II", data, offset)
-        if command == 0x19:
-            fileoff, filesize = struct.unpack_from("<QQ", data, offset + 40)
-            if fileoff and filesize:
-                content_offsets.append(fileoff)
-            sections = struct.unpack_from("<I", data, offset + 64)[0]
-            for index in range(sections):
-                section = offset + 72 + index * 80
-                section_size = struct.unpack_from("<Q", data, section + 40)[0]
-                file_offset = struct.unpack_from("<I", data, section + 48)[0]
-                if section_size and file_offset:
-                    content_offsets.append(file_offset)
-        offset += size
-
-    name = RUNTIME_LIBRARY.encode() + b"\0"
-    size = (24 + len(name) + 7) // 8 * 8
-    start = binary.header_size
-    end = start + size
-    if not content_offsets or end > min(content_offsets) or any(data[start:end]):
-        raise MachOError("Not enough unused Mach-O header space for the runtime helper")
-    
-    command = struct.pack("<6I", 0xC, size, 24, 0, 0, 0) + name
-    data[start:end] = command.ljust(size, b"\0")
-    count, command_bytes = struct.unpack_from("<II", data, 16)
-    struct.pack_into("<II", data, 16, count + 1, command_bytes + size)
-    MachO(data)
-    executable.write_bytes(data)
 
 def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
     source = Path(inspection["path"])

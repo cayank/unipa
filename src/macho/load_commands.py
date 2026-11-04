@@ -35,25 +35,30 @@ def build_platform(binary: MachO) -> int:
     
     return platforms[0]
 
+def dylib_names(binary: MachO) -> set[str]:
+    names = set()
+    for command, offset, size in commands(binary):
+        if command not in DYLIB_COMMANDS:
+            continue
+        if size < 24:
+            raise MachOError("Truncated dylib load command")
+
+        start = struct.unpack_from("<I", binary.data, offset + 8)[0]
+        if not 24 <= start < size:
+            raise MachOError("Invalid dylib name offset")
+
+        name = binary.data[offset + start : offset + size]
+        if b"\0" not in name:
+            raise MachOError("Unterminated dylib name")
+        names.add(name.split(b"\0", 1)[0].decode("utf-8"))
+    return names
+
 def add_dylibs(data: bytes, names: list[str]) -> bytes:
     binary = MachO(data)
-    existing = set()
+    existing = dylib_names(binary)
     content_offsets = []
     for command, offset, size in commands(binary):
-        if command in DYLIB_COMMANDS:
-            if size < 24:
-                raise MachOError("Truncated dylib load command")
-            
-            start = struct.unpack_from("<I", data, offset + 8)[0]
-            if not 24 <= start < size:
-                raise MachOError("Invalid dylib name offset")
-            
-            name = data[offset + start : offset + size]
-            if b"\0" not in name:
-                raise MachOError("Unterminated dylib name")
-            
-            existing.add(name.split(b"\0", 1)[0].decode("utf-8"))
-        elif command == 0x19:
+        if command == 0x19:
             fileoff, filesize = struct.unpack_from("<QQ", data, offset + 40)
             if fileoff and filesize:
                 content_offsets.append(fileoff)
@@ -88,7 +93,7 @@ def add_dylibs(data: bytes, names: list[str]) -> bytes:
     start = binary.header_size
     end = start + len(added)
     if (not content_offsets or end > min(content_offsets) or end > len(data) or any(data[start:end])):
-        raise MachOError("Not enough unused Mach-O header space for injected libraries")
+        raise MachOError("Not enough unused Mach-O header space for dylib load commands")
     
     result = bytearray(data)
     result[start:end] = added

@@ -4,7 +4,7 @@ For requirements, compatibility, installation, and everyday usage, see the [READ
 
 ## Finding the app and its process
 
-Apps are listed with `system_profiler`, and the executable name comes from `CFBundleExecutable`. Both the `Wrapper/*.app` layout and a plain iOS `.app` work.
+Apps are listed with `system_profiler`, and the executable name comes from `CFBundleExecutable`. Both the `Wrapper/*.app` layout and a plain iOS `.app` work. Excluded extensions are skipped during the source inventory scan and removed from the output copy before recovery.
 
 To find the running process, unipa first compares the executable's canonical path. macOS can launch wrapped iOS apps from a relocated `/private/var/folders/.../d/Wrapper/` path, so a different path is accepted only if the executable name and size match and the full SHA256 equals the selected app's executable. The verified runtime path is logged, and hashes are cached until the file metadata changes. A matching process is reused; if there is none, the app is launched.
 
@@ -48,25 +48,25 @@ Recovery supports thin, little-endian 64-bit Mach-O only. FAT/universal source a
 
 ## Dylib injection
 
-`--inject` validates and stages local libraries before dumping, then adds them to the output copy after recovery and before signing. This keeps the original executable header available for matching against the core. `src/inject.ts` calls the Python `prepare-injection` and `inject` commands; `src/macho/load_commands.py` adds load commands only within unused header padding. Libraries are signed and verified individually before the app is signed. Plans, results, and hashes are saved under `injection/` and listed in the manifest. See [dylib injection](injection.md) for usage and limits.
+`--inject` validates and stages local libraries before dumping, then adds them to the output copy after recovery and before signing. This keeps the original executable header available for matching against the core. `src/inject.ts` calls the Python `prepare-injection` and `inject` commands; `src/macho/load_commands.py` provides build-platform parsing, dylib-path validation, and header-padding checks shared by injection and Mac Catalyst conversion. Libraries are signed and verified individually before the app is signed. Plans, results, and hashes are saved under `injection/` and listed in the manifest. See [dylib injection](injection.md) for usage and limits.
 
 ## Output files
 
-Each run creates a new folder under `output/<app-name>-XXXXXX/`, using the `.app` bundle name followed by a random suffix. Use `--work-dir` to change the parent folder.
+Each run creates a new folder under `output/<app-name>-XXXXXX/`, using the lowercase `.app` bundle name followed by a random suffix. The default parent is the checkout's `output/` directory. Use `--work-dir` to change it.
 
 ```text
 Payload/App.app/                 Patched copy, signed unless disabled
-process.core                     Kept if the run fails; deleted after a verified IPA is created
-source.json                      Source bundle and Mach-O inventory
+process.core                     Generated core; kept until outputs and initial manifest are saved
+source.json                      Source bundle, retained Mach-O inventory, and excluded extensions
 recovery/000/analysis.json       All base candidates and comparison results
 recovery/000/region.bin          Extracted bytes (full cryptsize range)
 recovery/000/executable.patched  Patch result before signing
 recovery/000/result.json         Selected candidate and hashes
-manifest.json                    Summary of a successful run, including excluded extensions
+manifest.json                    Verified outputs and cleanup status
 App-patched.ipa                  Verified ZIP containing only Payload
 ```
 
-Failed runs keep their work folder. If the base is ambiguous or missing, `analysis.json` is there to explain why. Python outputs never overwrite existing files, so use a new recovery folder to retry.
+Failed runs keep their work folder. If the base is ambiguous or missing, `analysis.json` is there to explain why. Recovery artifacts never overwrite existing files, so use a new recovery folder to retry.
 
 unipa is macOS-only (`os: ["darwin"]`) and exits on any other system before doing any work. The host's macOS version, build, and architecture are saved under `host` in `source.json` and `manifest.json`, but no version cutoff is enforced. With an existing core, `host` describes the current machine, which may not be where the dump came from. For live-dump version limits, see [Compatibility](../README.md#compatibility).
 
@@ -82,9 +82,11 @@ The Mac Catalyst app, window size, signing, and conversion reports are covered i
 
 ## Cleanup
 
-After the IPA passes signing and archive checks (and the macOS conversion succeeds, if requested), unipa confirms the dumped process still runs the selected executable, then sends `SIGKILL` to that exact PID and deletes the core from that run. If recovery or packaging fails, the app and core stay in place.
+After the IPA passes signing and archive checks (and the macOS conversion succeeds, if requested), unipa saves `manifest.json` before cleanup. It then confirms the dumped process still runs the selected executable, sends `SIGKILL` to that exact PID, and deletes the generated core. Failures before the initial manifest is saved leave the app and core in place.
 
-Cores passed with `--core` or `--core-for` are never deleted, and runs with an existing core never launch or close an app. Cleanup results are saved in `manifest.json`. If cleanup fails, the verified IPA is kept, a warning is shown, and the exit code is nonzero.
+Cores passed with `--core` or `--core-for` are never deleted. `--core` prevents live dumping; `--core-for` supplies a core only for the specified binary, so other binaries may still require a live dump.
+
+The manifest is written atomically with `cleanup.status` set to `pending`, then replaced with cleanup results and a status of `complete` or `failed`. If cleanup fails, the verified IPA is kept, a warning is shown, and the exit code is nonzero. If saving the final results fails, the initial manifest remains with `pending` status; the app may already be closed and the core deleted.
 
 The [cleanup script](../scripts/clean-cores.ts) removes only regular `process.core` files directly inside recognized run folders under the chosen output directory. For app-named folders, the prefix must match the source app in a regular `source.json` file and the suffix must contain six letters or digits. Older run folders are also supported. It leaves IPAs, app copies, extracted regions, and reports alone, skips symlinks, and reports unreadable runs without stopping on them. The commands are in the [README](../README.md#cleanup).
 

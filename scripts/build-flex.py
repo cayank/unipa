@@ -60,10 +60,15 @@ def apply_patch(sources):
     if set(patches) != {"FLEX", "PrisonFLEX"}:
         raise ValueError("flex.patch must contain the FLEX and PrisonFLEX changes")
     
-    for name, patch in patches.items():
-        command = ["git", "-C", str(sources[name])]
+    for name, directory in sources.items():
+        command = ["git", "-C", str(directory)]
+        untracked = capture(command + ["ls-files", "--others"])
+        if untracked:
+            raise ValueError(f"{directory} has untracked files; move them aside and retry")
+
+        patch = patches.get(name, "")
         current = subprocess.check_output(
-            command + ["diff", "--no-ext-diff", "--no-color", "--binary",
+            command + ["diff", "HEAD", "--no-ext-diff", "--no-color", "--binary",
                        f"--src-prefix=a/{name}/", f"--dst-prefix=b/{name}/"], env=ENV,
         ).decode()
 

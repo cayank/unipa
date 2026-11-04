@@ -57,16 +57,27 @@ def bundle_info(app: Path) -> dict:
         "bundle_id": info.get("CFBundleIdentifier", ""),
     }
 
-def inspect_bundle(app: Path) -> dict:
+def inspect_bundle(app: Path, excluded_extensions: list[str] | None = None) -> dict:
     info = bundle_info(app)
     app = Path(info["path"])
     main_binary = MachO(Path(info["executable"]).read_bytes())
     if main_binary.filetype != MH_EXECUTE:
         raise MachOError("CFBundleExecutable must be a Mach-O executable (MH_EXECUTE)")
 
+    excluded = set(excluded_extensions or [])
+    for name in excluded:
+        if Path(name).name != name or not name.endswith(".appex"):
+            raise MachOError("Excluded extensions must be .appex names inside PlugIns")
+        extension = app / "PlugIns" / name
+        if extension.is_symlink() or not extension.is_dir():
+            raise MachOError(f"Invalid excluded extension: {extension}")
+
     encrypted = []
     binaries = []
     for root, dirs, files in os.walk(app, followlinks=False):
+        if Path(root) == app / "PlugIns":
+            dirs[:] = [name for name in dirs if name not in excluded]
+
         for name in dirs + files:
             item = Path(root) / name
             if item.is_symlink() and not item.resolve().is_relative_to(app):
@@ -145,6 +156,8 @@ def parse_args() -> argparse.Namespace:
     for command in ("bundle-info", "inspect-bundle"):
         bundle = commands.add_parser(command)
         bundle.add_argument("--app", type=Path, required=True)
+        if command == "inspect-bundle":
+            bundle.add_argument("--exclude-extension", action="append", default=[])
 
     macos = commands.add_parser("convert-macos")
     macos.add_argument("--app", type=Path, required=True)
@@ -184,7 +197,7 @@ def run_command(args: argparse.Namespace) -> dict:
         return bundle_info(args.app)
 
     if args.command == "inspect-bundle":
-        return inspect_bundle(args.app)
+        return inspect_bundle(args.app, args.exclude_extension)
 
     if args.command == "convert-macos":
         return convert_bundle(inspect_bundle(args.app), args.output_dir, args.identity)

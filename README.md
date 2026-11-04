@@ -63,7 +63,7 @@ unipa --app /Applications/Example.app --macos
 ```
 
 ```text
-output/Example-XXXXXX/
+output/example-XXXXXX/
 ├── Example-patched.ipa
 └── macos/
     └── Example.app
@@ -95,11 +95,11 @@ unipa \
   --core-for 'PlugIns/NotificationService.appex/NotificationService=/tmp/notification.core'
 ```
 
-To keep most extensions but drop one, add `--exclude-extension NotificationService.appex` instead. Both flags can be repeated. If an encrypted executable is left in a kept extension, packaging stops.
+To keep most extensions but drop one, add `--exclude-extension NotificationService.appex` instead. `--core-for` and `--exclude-extension` can each be repeated. If an encrypted executable is left in a kept extension, packaging stops.
 
 ## Output and signing
 
-Each run creates a folder like `output/<app-name>-XXXXXX/` with the IPA, a patched copy of the app, and recovery reports. The prefix comes from the `.app` bundle name. Use `--work-dir` to change where it goes. If a run fails, the folder is kept so you can look at it.
+Each run creates a folder like `output/<app-name>-XXXXXX/` with the IPA, a patched copy of the app, and recovery reports. The prefix is the lowercase `.app` bundle name. The default parent is this checkout's `output/` directory; use `--work-dir` to change it. If a run fails, the folder is kept so you can look at it.
 
 Signing is ad-hoc by default. `--identity 'Apple Development: …'` picks a different identity, and `--no-sign` skips signing (patching breaks the original signature either way). Source app binaries must be thin, little-endian 64-bit Mach-O files. Universal injection libraries are supported by selecting a compatible architecture; FAT source apps and 32-bit binaries are rejected.
 
@@ -109,9 +109,9 @@ The ad-hoc signature is not enough to install on an iPhone or iPad. You will nee
 
 ## Cleanup
 
-Once everything passes verification, unipa force-quits the app process it dumped and deletes the core it created. If recovery, packaging, or the macOS conversion fails, both are left in place so you can investigate.
+Once everything passes verification and `manifest.json` is saved, unipa force-quits the app process it dumped and deletes the core it created. If recovery, packaging, macOS conversion, or the initial manifest write fails, both are left in place so you can investigate.
 
-Cores you supply with `--core` or `--core-for` are never deleted, and runs that use an existing core never launch or close an app. If cleanup itself fails, the IPA is kept, the error is written to `manifest.json`, and the exit code is nonzero.
+Cores you supply with `--core` or `--core-for` are never deleted. `--core` skips live dumping. With only `--core-for`, unipa may still launch and dump the app if another encrypted binary needs a core. If cleanup itself fails, the IPA is kept, the error is written to `manifest.json`, and the exit code is nonzero.
 
 To preview or remove cores left over from failed runs, from the project directory:
 

@@ -29,8 +29,9 @@ async function isAppRun(folder: string): Promise<boolean> {
   }
 
   if (typeof source?.path !== "string") return false;
-  const prefix = `${path.basename(source.path, ".app")}-`;
-  return name.startsWith(prefix) && /^[A-Za-z0-9]{6}$/.test(name.slice(prefix.length));
+  const appName = path.basename(source.path, ".app");
+  const prefixes = [`${appName.toLowerCase()}-`, `${appName}-`];
+  return prefixes.some((prefix) => name.startsWith(prefix) && /^[A-Za-z0-9]{6}$/.test(name.slice(prefix.length)));
 }
 
 function formatSize(bytes: number): string {

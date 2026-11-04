@@ -28,7 +28,7 @@ python3 scripts/build-flex.py
 unipa --inject ./dylibs/unipa-flex.dylib
 ```
 
-The script downloads pinned [FLEX](https://github.com/FLEXTool/FLEX), [PrisonFLEX](https://github.com/Uraniumm/PrisonFLEX), and [Logos](https://github.com/theos/logos) sources, applies `scripts/flex.patch`, and builds an arm64 iOS 15+ dylib. Sources, build files, and license notices stay in the ignored `dylibs/flex/` directory.
+The script downloads pinned [FLEX](https://github.com/FLEXTool/FLEX), [PrisonFLEX](https://github.com/Uraniumm/PrisonFLEX), and [Logos](https://github.com/theos/logos) sources, applies `scripts/flex.patch`, and builds an arm64 iOS 15+ dylib. Sources, build files, and license notices stay in the ignored `dylibs/flex/` directory. Cached sources must match the pinned revisions and patch; unexpected tracked or untracked changes stop the build.
 
 Open it with Ctrl+Shift+F or Command+Shift+F on macOS, or a three-finger long press on iOS. Click × to collapse to the draggable handle, click the handle to expand, or hold × for two seconds to hide it. The compact button row scrolls when space is limited.
 

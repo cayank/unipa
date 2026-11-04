@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { version } from "./package.json";
@@ -31,7 +31,7 @@ Options:
   --pid <pid>                 Use an existing process of the selected app
   --core <file>               Use an existing core instead of taking a new dump
   --wait-ms <ms>              Delay before dumping (default: 2000)
-  --work-dir <dir>            Parent directory for runs (default: ./output)
+  --work-dir <dir>            Parent directory for runs (default: project's output directory)
   --base <0xaddress>          Select one verified runtime base for the main executable
   --core-for <path=core>      Core for another binary in the bundle (repeatable)
   --keep-extensions           Keep PlugIns/*.appex (default: removed from the output)
@@ -198,6 +198,12 @@ async function createWorkspace(selected: string, sourcePath: string, workDir: st
   return workspace;
 }
 
+async function saveManifest(file: string, manifest: unknown): Promise<void> {
+  const pending = `${file}.pending`;
+  await writeFile(pending, JSON.stringify(manifest, null, 2) + "\n", { mode: 0o600 });
+  await rename(pending, file);
+}
+
 async function getHostInfo() {
   const [version, build] = await Promise.all([execute(["/usr/bin/sw_vers", "-productVersion"]), execute(["/usr/bin/sw_vers", "-buildVersion"])]);
   return {
@@ -223,10 +229,13 @@ async function main() {
 
   const selected = options.appPath ? path.resolve(options.appPath) : await selectApp();
   const source = await resolveApp(selected);
-  const sourceInspection = await runMachO<BundleInspection>("inspect-bundle", ["--app", source.path]);
   const excluded = await getExcludedExtensions(source.path, options.keepExtensions, options.excludedExtensions);
-  const excludedPaths = excluded.map((extension) => path.join(source.path, "PlugIns", extension) + path.sep);
-  const encrypted = sourceInspection.encrypted.filter((binary) => !excludedPaths.some((extension) => binary.startsWith(extension)));
+  const inspectionArgs = ["--app", source.path];
+  for (const extension of excluded) {
+    inspectionArgs.push("--exclude-extension", extension);
+  }
+  const sourceInspection = await runMachO<BundleInspection>("inspect-bundle", inspectionArgs);
+  const encrypted = sourceInspection.encrypted;
   const extraCores = await getCoreOverrides(source.path, encrypted, excluded, options.coreOverrides);
   const workspace = await createWorkspace(selected, source.path, options.workDir);
 
@@ -248,7 +257,11 @@ async function main() {
     await rm(path.join(app, "PlugIns", extension), { recursive: true });
   }
 
-  await writeFile(path.join(workspace, "source.json"), JSON.stringify({ ...sourceInspection, selected, host }, null, 2), { mode: 0o600 });
+  await writeFile(
+    path.join(workspace, "source.json"),
+    JSON.stringify({ ...sourceInspection, selected, host, excluded_extensions: excluded }, null, 2),
+    { mode: 0o600 },
+  );
 
   let core: string | undefined;
   let generatedCore: string | undefined;
@@ -317,38 +330,43 @@ async function main() {
     log.success(`Prepared and signed ${macos.binaries.length} binaries`);
   }
 
+  const manifestPath = path.join(workspace, "manifest.json");
+  const manifest = {
+    source,
+    host,
+    core: core ?? null,
+    dump_pid: dumpPid ?? null,
+    cleanup: {
+      status: "pending",
+      app_closed: null,
+      core_deleted: false,
+      errors: [],
+    },
+    recoveries,
+    excluded_extensions: excluded,
+    injections,
+    identity: identity ?? null,
+    ipa,
+    macos,
+    created_at: new Date().toISOString(),
+  };
+  await saveManifest(manifestPath, manifest);
+
   const cleanup = await cleanupRun({ executable: source.executable, pid: dumpPid, generatedCore });
-  await writeFile(
-    path.join(workspace, "manifest.json"),
-    JSON.stringify(
-      {
-        source,
-        host,
-        core: core ?? null,
-        dump_pid: dumpPid ?? null,
-        cleanup: {
-          app_closed: cleanup.appClosed,
-          core_deleted: cleanup.coreDeleted,
-          errors: cleanup.errors,
-        },
-        recoveries,
-        excluded_extensions: excluded,
-        injections,
-        identity: identity ?? null,
-        ipa,
-        macos,
-        created_at: new Date().toISOString(),
-      },
-      null,
-      2,
-    ),
-    { mode: 0o600 },
-  );
+  await saveManifest(manifestPath, {
+    ...manifest,
+    cleanup: {
+      status: cleanup.errors.length ? "failed" : "complete",
+      app_closed: cleanup.appClosed,
+      core_deleted: cleanup.coreDeleted,
+      errors: cleanup.errors,
+    },
+  });
 
   if (cleanup.errors.length > 0) {
     process.exitCode = 1;
   }
-  
+
   log.success(`IPA ready: ${ipa}`);
   macos && log.success(`macOS app ready: ${macos.app}`);
 }
