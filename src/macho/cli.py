@@ -8,8 +8,8 @@ import plistlib
 import stat
 import sys
 from pathlib import Path
-
 from catalyst import convert_bundle
+from inject import apply_injection, prepare_injection
 from reader import (
     FAT_MAGICS,
     MAGIC,
@@ -151,6 +151,15 @@ def parse_args() -> argparse.Namespace:
     macos.add_argument("--output-dir", type=Path, required=True)
     macos.add_argument("--identity", default="-")
 
+    prepare = commands.add_parser("prepare-injection")
+    prepare.add_argument("--app", type=Path, required=True)
+    prepare.add_argument("--dylib", type=Path, action="append", required=True)
+    prepare.add_argument("--output-dir", type=Path, required=True)
+
+    inject = commands.add_parser("inject")
+    inject.add_argument("--app", type=Path, required=True)
+    inject.add_argument("--prepared", type=Path, required=True)
+
     inspect = commands.add_parser("inspect")
     inspect.add_argument("--binary", type=Path, required=True)
 
@@ -179,6 +188,12 @@ def run_command(args: argparse.Namespace) -> dict:
 
     if args.command == "convert-macos":
         return convert_bundle(inspect_bundle(args.app), args.output_dir, args.identity)
+
+    if args.command == "prepare-injection":
+        return prepare_injection(bundle_info(args.app), args.dylib, args.output_dir)
+
+    if args.command == "inject":
+        return apply_injection(bundle_info(args.app), args.prepared)
 
     if args.command == "recover":
         return recover(args.binary, args.core, args.output_dir, args.base)

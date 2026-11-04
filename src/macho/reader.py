@@ -1,5 +1,5 @@
-"""Mach-O parsing and core-memory reads.
-
+"""
+Mach-O parsing and core-memory reads.
 File layouts follow XNU's EXTERNAL_HEADERS/mach-o/loader.h
 """
 

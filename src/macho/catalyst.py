@@ -11,7 +11,6 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-
 from entitlements import compatibility_sandbox, macos_entitlements
 from reader import MachO, MachOError
 
@@ -25,7 +24,6 @@ DYLIB_COMMANDS = {0xC, 0x80000018, 0x8000001F, 0x80000023}
 SWIFT_UIKIT = "@rpath/libswiftUIKit.dylib"
 CATALYST_SWIFT_UIKIT = "/System/iOSSupport/usr/lib/swift/libswiftUIKit.dylib"
 RUNTIME_LIBRARY = "@executable_path/Frameworks/UnipaRuntime.dylib"
-
 
 @dataclass(frozen=True)
 class Binary:
@@ -50,19 +48,23 @@ def inspect_binary(path: Path, app: Path) -> Binary:
             if size < 24:
                 raise MachOError(f"Truncated LC_BUILD_VERSION: {path}")
             platform, _, _, tools = struct.unpack_from("<4I", data, offset + 8)
+
             if 24 + tools * 8 > size:
                 raise MachOError(f"Truncated build tool table: {path}")
             platforms.append(platform)
         elif command in VERSION_COMMANDS:
             if size < 16:
                 raise MachOError(f"Truncated minimum OS command: {path}")
+            
             platforms.append(VERSION_COMMANDS[command])
         elif command in DYLIB_COMMANDS:
             if size < 24:
                 raise MachOError(f"Truncated dylib command: {path}")
+            
             start = struct.unpack_from("<I", data, offset + 8)[0]
             if not 24 <= start < size:
                 raise MachOError(f"Invalid dylib name offset: {path}")
+            
             name = data[offset + start : offset + size]
             if b"\0" not in name:
                 raise MachOError(f"Unterminated dylib name: {path}")
@@ -78,7 +80,6 @@ def run_tool(*arguments: str) -> str:
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
         raise MachOError(f"{arguments[0]} exited with {result.returncode}: {detail}")
-
     return result.stdout.strip()
 
 def write_json(path: Path, value: dict) -> None:
@@ -96,7 +97,6 @@ def signing_targets(app: Path, binaries: list[Binary], executable: Path) -> list
                 break
             if parent.suffix in (".framework", ".bundle", ".app", ".xpc"):
                 targets.add(parent)
-
     return sorted(targets, key=lambda target: (-len(target.parts), str(target)))
 
 def add_runtime_hooks(executable: Path, app: Path) -> Binary:
@@ -157,6 +157,7 @@ def link_runtime_hooks(executable: Path) -> None:
     end = start + size
     if not content_offsets or end > min(content_offsets) or any(data[start:end]):
         raise MachOError("Not enough unused Mach-O header space for the runtime helper")
+    
     command = struct.pack("<6I", 0xC, size, 24, 0, 0, 0) + name
     data[start:end] = command.ljust(size, b"\0")
     count, command_bytes = struct.unpack_from("<II", data, 16)
@@ -169,10 +170,13 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
     output_dir = output_dir.resolve()
     if output_dir.is_relative_to(source):
         raise MachOError("macOS output directory cannot be inside the source app")
+    
     if inspection["encrypted"]:
         raise MachOError("Decrypt all binaries before macOS conversion")
+    
     if any(source.rglob("*.appex")):
         raise MachOError("macOS conversion does not support retained iOS extensions")
+    
     bundle_id = inspection["bundle_id"]
     if not isinstance(bundle_id, str) or not bundle_id:
         raise MachOError("macOS conversion requires a CFBundleIdentifier")
@@ -182,6 +186,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
     main = next(binary for binary in binaries if binary.relative == main_relative)
     if main.platform not in (IOS, MAC_CATALYST):
         raise MachOError("macOS conversion expects an iOS or Mac Catalyst executable")
+    
     vtool = run_tool("/usr/bin/xcrun", "--find", "vtool")
     install_name_tool = run_tool("/usr/bin/xcrun", "--find", "install_name_tool")
 
@@ -285,41 +290,23 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
         executable = pending / main_relative
         helper = add_runtime_hooks(executable, pending)
         binaries.append(helper)
-        report["binaries"].append(
-            {
-                "binary": str(helper.relative),
-                "original_platform": None,
-                "platform": helper.platform,
-                "swift_uikit_fixed": False,
-            }
-        )
+        report_binary = {
+            "binary": str(helper.relative),
+            "original_platform": None,
+            "platform": helper.platform,
+            "swift_uikit_fixed": False
+        }
+        report["binaries"].append(report_binary)
+
         for target in signing_targets(pending, binaries, executable):
             run_tool("/usr/bin/codesign", "--force", "--sign", identity, str(target))
             run_tool("/usr/bin/codesign", "--verify", "--strict", str(target))
             report["signed_targets"].append(str(target.relative_to(pending)))
-        run_tool(
-            "/usr/bin/codesign",
-            "--force",
-            "--sign",
-            identity,
-            "--entitlements",
-            str(entitlements),
-            str(pending),
-        )
-        run_tool(
-            "/usr/bin/codesign",
-            "--verify",
-            "--deep",
-            "--strict",
-            str(pending),
-        )
+
+        run_tool("/usr/bin/codesign", "--force", "--sign", identity, "--entitlements", str(entitlements), str(pending))
+        run_tool("/usr/bin/codesign", "--verify", "--deep", "--strict", str(pending))
         for binary in binaries:
-            run_tool(
-                "/usr/bin/codesign",
-                "--verify",
-                "--strict",
-                str(pending / binary.relative),
-            )
+            run_tool ("/usr/bin/codesign","--verify","--strict",str(pending / binary.relative))
 
         pending.rename(output)
         report["status"] = "ready"

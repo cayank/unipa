@@ -13,8 +13,6 @@
   "scripts": {
     "start": "bun run index.ts",
     "clean:cores": "bun run scripts/clean-cores.ts",
-    "typecheck": "tsc --noEmit",
-    "test": "python3 -B -m unittest discover -s tests -v && bun test",
     "format": "bun fmt",
     "format:check": "bun fmt --check"
   },

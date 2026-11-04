@@ -1,0 +1,465 @@
+diff --git a/FLEX/Classes/ExplorerInterface/FLEXExplorerViewController.m b/FLEX/Classes/ExplorerInterface/FLEXExplorerViewController.m
+index d3d514f..deb15b2 100644
+--- a/FLEX/Classes/ExplorerInterface/FLEXExplorerViewController.m
++++ b/FLEX/Classes/ExplorerInterface/FLEXExplorerViewController.m
+@@ -113,9 +113,7 @@ - (void)viewDidLoad {
+     [self updateToolbarPositionWithUnconstrainedFrame:CGRectMake(
+         CGRectGetMinX(safeArea), toolbarOriginY, toolbarSize.width, toolbarSize.height
+     )];
+-    self.explorerToolbar.autoresizingMask = UIViewAutoresizingFlexibleWidth |
+-                                            UIViewAutoresizingFlexibleBottomMargin |
+-                                            UIViewAutoresizingFlexibleTopMargin;
++    self.explorerToolbar.autoresizingMask = UIViewAutoresizingNone;
+     [self.view addSubview:self.explorerToolbar];
+     [self setupToolbarActions];
+     [self setupToolbarGestures];
+@@ -152,6 +150,15 @@ - (void)viewDidLoad {
+     ];
+ }
+ 
++- (void)viewDidLayoutSubviews {
++    [super viewDidLayoutSubviews];
++
++    CGRect frame = [self constrainedToolbarFrame:self.explorerToolbar.frame];
++    if (!CGRectEqualToRect(frame, self.explorerToolbar.frame)) {
++        self.explorerToolbar.frame = frame;
++    }
++}
++
+ - (void)viewWillAppear:(BOOL)animated {
+     [super viewWillAppear:animated];
+     
+@@ -463,9 +470,28 @@ - (void)globalsButtonTapped:(FLEXExplorerToolbarItem *)sender {
+     [self toggleMenuTool];
+ }
+ 
+-- (void)closeButtonTapped:(FLEXExplorerToolbarItem *)sender {
++- (void)collapseToolbar {
++    if (self.presentedViewController) {
++        [self dismissViewControllerAnimated:NO completion:nil];
++    }
+     self.currentMode = FLEXExplorerModeDefault;
+-    [self.delegate explorerViewControllerDidFinish:self];
++    self.selectedView = nil;
++    self.viewsAtTapPoint = nil;
++    [self removeAndClearOutlineViews];
++    self.tapIndicatorView.hidden = YES;
++    self.explorerToolbar.collapsed = YES;
++    [self.view layoutIfNeeded];
++}
++
++- (void)closeButtonTapped:(FLEXExplorerToolbarItem *)sender {
++    [self collapseToolbar];
++}
++
++- (void)handleCloseLongPress:(UILongPressGestureRecognizer *)gesture {
++    if (gesture.state == UIGestureRecognizerStateBegan) {
++        [self collapseToolbar];
++        [self.delegate explorerViewControllerDidFinish:self];
++    }
+ }
+ 
+ - (void)updateButtonStates {
+@@ -497,10 +523,15 @@ - (void)setupToolbarGestures {
+         initWithTarget:self action:@selector(handleToolbarPanGesture:)
+     ]];
+     
+-    // Tap gesture for hinting.
+     [toolbar.dragHandle addGestureRecognizer:[[UITapGestureRecognizer alloc]
+-        initWithTarget:self action:@selector(handleToolbarHintTapGesture:)
++        initWithTarget:self action:@selector(handleToolbarHandleTapGesture:)
+     ]];
++
++    UILongPressGestureRecognizer *hideGesture = [[UILongPressGestureRecognizer alloc]
++        initWithTarget:self action:@selector(handleCloseLongPress:)];
++    hideGesture.minimumPressDuration = 2.0;
++    hideGesture.cancelsTouchesInView = YES;
++    [toolbar.closeItem addGestureRecognizer:hideGesture];
+     
+     // Tap gesture for showing additional details
+     self.detailsTapGR = [[UITapGestureRecognizer alloc]
+@@ -550,43 +581,42 @@ - (void)handleToolbarPanGesture:(UIPanGestureRecognizer *)panGR {
+ - (void)updateToolbarPositionWithDragGesture:(UIPanGestureRecognizer *)panGR {
+     CGPoint translation = [panGR translationInView:self.view];
+     CGRect newToolbarFrame = self.toolbarFrameBeforeDragging;
++    newToolbarFrame.origin.x += translation.x;
+     newToolbarFrame.origin.y += translation.y;
+     
+     [self updateToolbarPositionWithUnconstrainedFrame:newToolbarFrame];
+ }
+ 
+-- (void)updateToolbarPositionWithUnconstrainedFrame:(CGRect)unconstrainedFrame {
++- (CGRect)constrainedToolbarFrame:(CGRect)frame {
+     CGRect safeArea = [self viewSafeArea];
+-    // We only constrain the Y-axis because we want the toolbar
+-    // to handle the X-axis safeArea layout by itself
+-    CGFloat minY = CGRectGetMinY(safeArea);
+-    CGFloat maxY = CGRectGetMaxY(safeArea) - unconstrainedFrame.size.height;
+-    if (unconstrainedFrame.origin.y < minY) {
+-        unconstrainedFrame.origin.y = minY;
+-    } else if (unconstrainedFrame.origin.y > maxY) {
+-        unconstrainedFrame.origin.y = maxY;
+-    }
+-
+-    self.explorerToolbar.frame = unconstrainedFrame;
+-    NSUserDefaults.standardUserDefaults.flex_toolbarTopMargin = unconstrainedFrame.origin.y;
+-}
+-
+-- (void)handleToolbarHintTapGesture:(UITapGestureRecognizer *)tapGR {
+-    // Bounce the toolbar to indicate that it is draggable.
+-    // TODO: make it bouncier.
+-    if (tapGR.state == UIGestureRecognizerStateRecognized) {
+-        CGRect originalToolbarFrame = self.explorerToolbar.frame;
+-        const NSTimeInterval kHalfwayDuration = 0.2;
+-        const CGFloat kVerticalOffset = 30.0;
+-        [UIView animateWithDuration:kHalfwayDuration delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+-            CGRect newToolbarFrame = self.explorerToolbar.frame;
+-            newToolbarFrame.origin.y += kVerticalOffset;
+-            self.explorerToolbar.frame = newToolbarFrame;
+-        } completion:^(BOOL finished) {
+-            [UIView animateWithDuration:kHalfwayDuration delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+-                self.explorerToolbar.frame = originalToolbarFrame;
+-            } completion:nil];
+-        }];
++    CGFloat margin = 8;
++    CGSize available = CGSizeMake(
++        MAX(0, CGRectGetWidth(safeArea) - margin * 2),
++        MAX(0, CGRectGetHeight(safeArea) - margin * 2)
++    );
++    CGFloat centerX = CGRectGetMidX(frame);
++    frame.size = [self.explorerToolbar sizeThatFits:available];
++    frame.origin.x = centerX - CGRectGetWidth(frame) / 2;
++
++    CGFloat minX = CGRectGetMinX(safeArea) + margin;
++    CGFloat minY = CGRectGetMinY(safeArea) + margin;
++    CGFloat maxX = MAX(minX, CGRectGetMaxX(safeArea) - margin - CGRectGetWidth(frame));
++    CGFloat maxY = MAX(minY, CGRectGetMaxY(safeArea) - margin - CGRectGetHeight(frame));
++    frame.origin.x = MIN(MAX(frame.origin.x, minX), maxX);
++    frame.origin.y = MIN(MAX(frame.origin.y, minY), maxY);
++    return frame;
++}
++
++- (void)updateToolbarPositionWithUnconstrainedFrame:(CGRect)frame {
++    frame = [self constrainedToolbarFrame:frame];
++    self.explorerToolbar.frame = frame;
++    NSUserDefaults.standardUserDefaults.flex_toolbarTopMargin = frame.origin.y;
++}
++
++- (void)handleToolbarHandleTapGesture:(UITapGestureRecognizer *)gesture {
++    if (gesture.state == UIGestureRecognizerStateRecognized) {
++        self.explorerToolbar.collapsed = NO;
++        [self.view layoutIfNeeded];
+     }
+ }
+ 
+@@ -923,20 +953,8 @@ - (CGRect)viewSafeArea {
+ }
+ 
+ - (void)viewSafeAreaInsetsDidChange {
+-    if (@available(iOS 11.0, *)) {
+-        [super viewSafeAreaInsetsDidChange];
+-
+-        CGRect safeArea = [self viewSafeArea];
+-        CGSize toolbarSize = [self.explorerToolbar sizeThatFits:CGSizeMake(
+-            CGRectGetWidth(self.view.bounds), CGRectGetHeight(safeArea)
+-        )];
+-        [self updateToolbarPositionWithUnconstrainedFrame:CGRectMake(
+-            CGRectGetMinX(self.explorerToolbar.frame),
+-            CGRectGetMinY(self.explorerToolbar.frame),
+-            toolbarSize.width,
+-            toolbarSize.height)
+-        ];
+-    }
++    [super viewSafeAreaInsetsDidChange];
++    [self.view setNeedsLayout];
+ }
+ 
+ 
+@@ -945,6 +963,10 @@ - (void)viewSafeAreaInsetsDidChange {
+ - (BOOL)shouldReceiveTouchAtWindowPoint:(CGPoint)pointInWindowCoordinates {
+     CGPoint pointInLocalCoordinates = [self.view convertPoint:pointInWindowCoordinates fromView:nil];
+ 
++    if (self.explorerToolbar.isCollapsed) {
++        return CGRectContainsPoint(self.explorerToolbar.frame, pointInLocalCoordinates);
++    }
++
+     // If we have a modal presented, is it in the modal?
+     if (self.presentedViewController) {
+         UIView *presentedView = self.presentedViewController.view;
+diff --git a/FLEX/Classes/Manager/FLEXManager.m b/FLEX/Classes/Manager/FLEXManager.m
+index 22e098b..b406a5d 100644
+--- a/FLEX/Classes/Manager/FLEXManager.m
++++ b/FLEX/Classes/Manager/FLEXManager.m
+@@ -72,6 +72,8 @@ - (FLEXExplorerViewController *)explorerViewController {
+ 
+ - (void)showExplorer {
+     UIWindow *flex = self.explorerWindow;
++    [self.explorerViewController loadViewIfNeeded];
++    self.toolbar.collapsed = NO;
+     flex.hidden = NO;
+     if (@available(iOS 13.0, *)) {
+         // Only look for a new scene if we don't have one
+@@ -125,10 +127,13 @@ - (void)presentObjectExplorer:(id)object completion:(void (^)(UINavigationContro
+ }
+ 
+ - (void)showExplorerFromScene:(UIWindowScene *)scene {
++    UIWindow *flex = self.explorerWindow;
+     if (@available(iOS 13.0, *)) {
+-        self.explorerWindow.windowScene = scene;
++        flex.windowScene = scene;
+     }
+-    self.explorerWindow.hidden = NO;
++    [self.explorerViewController loadViewIfNeeded];
++    self.toolbar.collapsed = NO;
++    flex.hidden = NO;
+ }
+ 
+ - (BOOL)isHidden {
+diff --git a/FLEX/Classes/Toolbar/FLEXExplorerToolbar.h b/FLEX/Classes/Toolbar/FLEXExplorerToolbar.h
+index f6cd0f9..e43a42d 100644
+--- a/FLEX/Classes/Toolbar/FLEXExplorerToolbar.h
++++ b/FLEX/Classes/Toolbar/FLEXExplorerToolbar.h
+@@ -20,6 +20,9 @@ NS_ASSUME_NONNULL_BEGIN
+ /// globalsItem, hierarchyItem, selectItem, moveItem, closeItem
+ @property (nonatomic, copy) NSArray<FLEXExplorerToolbarItem *> *toolbarItems;
+ 
++/// Leave only the draggable handle visible.
++@property (nonatomic, getter=isCollapsed) BOOL collapsed;
++
+ /// Toolbar item for selecting views.
+ @property (nonatomic, readonly) FLEXExplorerToolbarItem *selectItem;
+ 
+diff --git a/FLEX/Classes/Toolbar/FLEXExplorerToolbar.m b/FLEX/Classes/Toolbar/FLEXExplorerToolbar.m
+index b9050a6..6018f26 100644
+--- a/FLEX/Classes/Toolbar/FLEXExplorerToolbar.m
++++ b/FLEX/Classes/Toolbar/FLEXExplorerToolbar.m
+@@ -12,6 +12,11 @@
+ #import "FLEXResources.h"
+ #import "FLEXUtility.h"
+ 
++static const CGFloat toolbarButtonWidth = 48;
++static const CGFloat toolbarButtonSpacing = 6;
++static const CGFloat toolbarHorizontalPadding = 6;
++static const CGFloat toolbarDragHandleWidth = 24;
++
+ // Workaround for Xcode < 26, because I don't like Xcode 26 :)
+ #if !__has_include(<UIKit/UIGlassEffect.h>)
+ @interface UIGlassEffect : UIVisualEffect @end
+@@ -29,6 +34,7 @@ @interface FLEXExplorerToolbar ()
+ @property (nonatomic, readwrite) UIView *dragHandle;
+ 
+ @property (nonatomic) UIImageView *dragHandleImageView;
++@property (nonatomic) UIScrollView *buttonScrollView;
+ 
+ @property (nonatomic) UIView *selectedViewDescriptionContainer;
+ @property (nonatomic) UIView *selectedViewDescriptionSafeAreaContainer;
+@@ -60,10 +66,26 @@ - (id)initWithFrame:(CGRect)frame {
+             [self addSubview:self.backgroundView];
+         }
+ 
++        self.backgroundView.layer.cornerRadius = 10;
++        self.backgroundView.clipsToBounds = YES;
++
++        self.buttonScrollView = [UIScrollView new];
++        self.buttonScrollView.showsHorizontalScrollIndicator = NO;
++        self.buttonScrollView.showsVerticalScrollIndicator = NO;
++        self.buttonScrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
++        self.buttonScrollView.delaysContentTouches = NO;
++        [self addSubview:self.buttonScrollView];
++
+         // Drag handle
+         self.dragHandle = [UIView new];
+         self.dragHandle.backgroundColor = UIColor.clearColor;
+-        self.dragHandleImageView = [[UIImageView alloc] initWithImage:FLEXResources.dragHandle];
++        UIImageSymbolConfiguration *handleConfiguration = [UIImageSymbolConfiguration
++            configurationWithPointSize:16 weight:UIImageSymbolWeightRegular];
++        UIImage *handleImage = [UIImage systemImageNamed:@"line.3.horizontal"
++            withConfiguration:handleConfiguration];
++        self.dragHandleImageView = [[UIImageView alloc] initWithImage:handleImage];
++        self.dragHandleImageView.contentMode = UIViewContentModeScaleAspectFit;
++        self.dragHandleImageView.frame = CGRectMake(0, 0, 20, 16);
+         self.dragHandleImageView.tintColor = [FLEXColor.iconColor colorWithAlphaComponent:0.666];
+         [self.dragHandle addSubview:self.dragHandleImageView];
+         [self addSubview:self.dragHandle];
+@@ -139,33 +161,35 @@ - (void)layoutSubviews {
+         topPadding = [[self class] glassVerticalPadding];
+     }
+ 
+-    self.dragHandle.frame = CGRectMake(CGRectGetMinX(safeArea), CGRectGetMinY(safeArea) + topPadding, [[self class] dragHandleWidth], kToolbarItemHeight);
++    CGFloat handleX = CGRectGetMinX(safeArea) + (self.isCollapsed ? 0 : toolbarHorizontalPadding);
++    CGFloat handleWidth = self.isCollapsed ? CGRectGetWidth(safeArea) : toolbarDragHandleWidth;
++    self.dragHandle.frame = CGRectMake(handleX, CGRectGetMinY(safeArea) + topPadding, handleWidth, kToolbarItemHeight);
+     CGRect dragHandleImageFrame = self.dragHandleImageView.frame;
+     dragHandleImageFrame.origin.x = FLEXFloor((self.dragHandle.frame.size.width - dragHandleImageFrame.size.width) / 2.0);
+     dragHandleImageFrame.origin.y = FLEXFloor((self.dragHandle.frame.size.height - dragHandleImageFrame.size.height) / 2.0);
+     self.dragHandleImageView.frame = dragHandleImageFrame;
+ 
+ 
+-    // Toolbar Items
+-    CGFloat originX = CGRectGetMaxX(self.dragHandle.frame);
+-    CGFloat originY = CGRectGetMinY(safeArea) + topPadding;
+-    CGFloat height = kToolbarItemHeight;
+-    CGFloat width = FLEXFloor((CGRectGetWidth(safeArea) - CGRectGetWidth(self.dragHandle.frame)) / self.toolbarItems.count);
++    CGFloat scrollOriginX = CGRectGetMaxX(self.dragHandle.frame) + toolbarButtonSpacing;
++    CGFloat scrollWidth = MAX(0, CGRectGetMaxX(safeArea) - toolbarHorizontalPadding - scrollOriginX);
++    self.buttonScrollView.frame = CGRectMake(
++        scrollOriginX, CGRectGetMinY(safeArea) + topPadding, scrollWidth, kToolbarItemHeight
++    );
++
++    CGFloat originX = 0;
+     for (FLEXExplorerToolbarItem *toolbarItem in self.toolbarItems) {
+-        toolbarItem.currentItem.frame = CGRectMake(originX, originY, width, height);
+-        originX = CGRectGetMaxX(toolbarItem.currentItem.frame);
++        toolbarItem.currentItem.frame = CGRectMake(originX, 0, toolbarButtonWidth, kToolbarItemHeight);
++        originX += toolbarButtonWidth + toolbarButtonSpacing;
+     }
+-    
+-    // Make sure the last toolbar item goes to the edge to account for any accumulated rounding effects.
+-    UIView *lastToolbarItem = self.toolbarItems.lastObject.currentItem;
+-    CGRect lastToolbarItemFrame = lastToolbarItem.frame;
+-    CGFloat rightEdge = CGRectGetMaxX(safeArea);
+-    if (@available(iOS 26, *)) {
+-        const CGFloat kGlassInset = [[self class] glassHorizontalInset];
+-        rightEdge = CGRectGetWidth(self.bounds) - kGlassInset;
++    CGFloat contentWidth = MAX(0, originX - toolbarButtonSpacing);
++    self.buttonScrollView.contentSize = CGSizeMake(contentWidth, kToolbarItemHeight);
++    self.buttonScrollView.bounces = contentWidth > scrollWidth;
++
++    CGFloat maximumOffset = MAX(0, contentWidth - scrollWidth);
++    CGPoint offset = CGPointMake(MIN(MAX(0, self.buttonScrollView.contentOffset.x), maximumOffset), 0);
++    if (!CGPointEqualToPoint(offset, self.buttonScrollView.contentOffset)) {
++        self.buttonScrollView.contentOffset = offset;
+     }
+-    lastToolbarItemFrame.size.width = rightEdge - lastToolbarItemFrame.origin.x;
+-    lastToolbarItem.frame = lastToolbarItemFrame;
+ 
+     if (@available(iOS 26, *)) {
+         const CGFloat kGlassInset = [[self class] glassHorizontalInset];
+@@ -229,6 +253,18 @@ - (void)layoutSubviews {
+ 
+ #pragma mark - Setter Overrides
+ 
++- (void)setCollapsed:(BOOL)collapsed {
++    if (_collapsed == collapsed) {
++        return;
++    }
++
++    _collapsed = collapsed;
++    self.buttonScrollView.hidden = collapsed;
++    self.selectedViewDescriptionContainer.hidden = collapsed || !self.selectedViewDescription.length;
++    [self setNeedsLayout];
++    [self.superview setNeedsLayout];
++}
++
+ - (void)setToolbarItems:(NSArray<FLEXExplorerToolbarItem *> *)toolbarItems {
+     if (_toolbarItems == toolbarItems) {
+         return;
+@@ -245,7 +281,7 @@ - (void)setToolbarItems:(NSArray<FLEXExplorerToolbarItem *> *)toolbarItems {
+     }
+ 
+     for (FLEXExplorerToolbarItem *item in toolbarItems) {
+-        [self addSubview:item.currentItem];
++        [self.buttonScrollView addSubview:item.currentItem];
+     }
+ 
+     _toolbarItems = toolbarItems.copy;
+@@ -266,8 +302,10 @@ - (void)setSelectedViewDescription:(NSString *)selectedViewDescription {
+     if (![_selectedViewDescription isEqual:selectedViewDescription]) {
+         _selectedViewDescription = selectedViewDescription;
+         self.selectedViewDescriptionLabel.text = selectedViewDescription;
+-        BOOL showDescription = selectedViewDescription.length > 0;
++        BOOL showDescription = !self.isCollapsed && selectedViewDescription.length > 0;
+         self.selectedViewDescriptionContainer.hidden = !showDescription;
++        [self setNeedsLayout];
++        [self.superview setNeedsLayout];
+     }
+ }
+ 
+@@ -317,11 +355,25 @@ + (CGFloat)horizontalPadding {
+ - (CGSize)sizeThatFits:(CGSize)size {
+     CGFloat height = 0.0;
+     height += [[self class] toolbarItemHeight];
+-    height += [[self class] descriptionContainerHeight];
++    if (!self.selectedViewDescriptionContainer.hidden) {
++        height += [[self class] descriptionContainerHeight];
++        if (@available(iOS 26, *)) {
++            height += 2;
++        }
++    }
+     if (@available(iOS 26, *)) {
+         height += [[self class] glassVerticalPadding] * 2;
+     }
+-    return CGSizeMake(size.width, height);
++
++    if (self.isCollapsed) {
++        return CGSizeMake(MAX(0, MIN(size.width, 44)), height);
++    }
++
++    NSUInteger count = self.toolbarItems.count;
++    CGFloat buttonsWidth = count * toolbarButtonWidth + (count ? count - 1 : 0) * toolbarButtonSpacing;
++    CGFloat preferredWidth = toolbarHorizontalPadding * 2 + toolbarDragHandleWidth +
++        toolbarButtonSpacing + buttonsWidth;
++    return CGSizeMake(MAX(0, MIN(size.width, preferredWidth)), height);
+ }
+ 
+ - (CGRect)safeArea {
+diff --git a/PrisonFLEX/Tweak.x b/PrisonFLEX/Tweak.x
+index f8de82f..bffc484 100644
+--- a/PrisonFLEX/Tweak.x
++++ b/PrisonFLEX/Tweak.x
+@@ -7,6 +7,7 @@
+ 
+ @interface PrisonFLEX : NSObject
+ + (void)handleLongPress:(UILongPressGestureRecognizer *)gestureRecognizer;
+++ (void)showInWindow:(UIWindow *)window;
+ @end
+ 
+ @implementation PrisonFLEX
+@@ -14,11 +15,11 @@
+     if (gestureRecognizer.state != UIGestureRecognizerStateBegan)
+         return;
+ 
+-    FLEXManager *manager = [FLEXManager sharedManager];
+-    if (!manager.isHidden)
+-        return;
++    [self showInWindow:(UIWindow *)gestureRecognizer.view];
++}
+ 
+-    UIWindow *window = (UIWindow *)gestureRecognizer.view;
+++ (void)showInWindow:(UIWindow *)window {
++    FLEXManager *manager = [FLEXManager sharedManager];
+     UIWindowScene *scene = window.windowScene;
+     scene ? [manager showExplorerFromScene:scene] : [manager showExplorer];
+ }
+@@ -34,6 +35,31 @@ static UILongPressGestureRecognizer *RegisterLongPressGesture(UIWindow *window,
+ 
+ %hook UIWindow
+ %property (nonatomic, strong) UILongPressGestureRecognizer *prisonFLEXLongPress;
++
++- (NSArray<UIKeyCommand *> *)keyCommands {
++    NSArray<UIKeyCommand *> *commands = %orig;
++    if (!NSClassFromString(@"NSApplication"))
++        return commands;
++
++    UIKeyCommand *commandShortcut = [UIKeyCommand keyCommandWithInput:@"f"
++        modifierFlags:UIKeyModifierCommand | UIKeyModifierShift
++        action:@selector(prisonFLEXOpenExplorer:)];
++    UIKeyCommand *controlShortcut = [UIKeyCommand keyCommandWithInput:@"f"
++        modifierFlags:UIKeyModifierControl | UIKeyModifierShift
++        action:@selector(prisonFLEXOpenExplorer:)];
++    NSArray<UIKeyCommand *> *shortcuts = @[commandShortcut, controlShortcut];
++    for (UIKeyCommand *shortcut in shortcuts) {
++        shortcut.discoverabilityTitle = @"Open FLEX";
++        shortcut.wantsPriorityOverSystemBehavior = YES;
++    }
++    return [(commands ?: @[]) arrayByAddingObjectsFromArray:shortcuts];
++}
++
++%new
++- (void)prisonFLEXOpenExplorer:(UIKeyCommand *)command {
++    [PrisonFLEX showInWindow:self];
++}
++
+ - (void)becomeKeyWindow {
+     %orig();
+     if (!self.prisonFLEXLongPress &&

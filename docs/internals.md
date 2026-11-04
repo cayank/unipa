@@ -44,7 +44,11 @@ The address is only an example; use one from your own report. `--base` chooses a
 
 The patch changes only the `cryptoff..cryptoff+cryptsize` range and the `cryptid` field in the encryption command. The result is read back and verified, and the source app is never touched. Before packaging, every Mach-O file is scanned again, and if any encrypted executable is left, no IPA is produced.
 
-Only thin, little-endian 64-bit Mach-O is supported. FAT/universal and 32-bit files fail with an explicit error, and no other architecture is ever picked silently. The encrypted range must sit inside a single executable segment, though in the core it may span several adjacent ones.
+Recovery supports thin, little-endian 64-bit Mach-O only. FAT/universal source apps and 32-bit files fail with an explicit error. Injection libraries can be universal; one compatible CPU type and subtype is selected before embedding. The encrypted range must sit inside a single executable segment, though in the core it may span several adjacent ones.
+
+## Dylib injection
+
+`--inject` validates and stages local libraries before dumping, then adds them to the output copy after recovery and before signing. This keeps the original executable header available for matching against the core. `src/inject.ts` calls the Python `prepare-injection` and `inject` commands; `src/macho/load_commands.py` adds load commands only within unused header padding. Libraries are signed and verified individually before the app is signed. Plans, results, and hashes are saved under `injection/` and listed in the manifest. See [dylib injection](injection.md) for usage and limits.
 
 ## Output files
 
@@ -93,15 +97,6 @@ From the project directory:
 ```bash
 bun run format
 bun run format:check
-bun run typecheck
-bun run test    # Bun and Python tests together
-```
-
-The two test suites can also be run separately:
-
-```bash
-bun test
-python3 -B -m unittest discover -s tests -v
 ```
 
 The Python backend can be run on its own:

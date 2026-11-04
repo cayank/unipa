@@ -71,6 +71,16 @@ output/Example-XXXXXX/
 
 It needs the Xcode Command Line Tools (`xcode-select --install`) and cannot be combined with `--no-sign` or `--keep-extensions`. See [macOS conversion](docs/catalyst.md) for details and known limits.
 
+### Dylib injection
+
+Use `--inject` to embed a local iOS dylib into the output app. Repeat the flag for multiple libraries; `.dylib.gz` and `.dylib.xz` files are also accepted.
+
+```bash
+unipa --app /Applications/Example.app --inject ./dylibs/unipa-flex.dylib
+```
+
+Keep downloaded libraries in the Git-ignored `dylibs/` directory, or pass a file from any other location. Injection currently supports IPA output and cannot be combined with `--macos`. See [dylib injection](docs/injection.md) for configuration, architecture selection, and signing details.
+
 ## Extensions
 
 App extensions (`PlugIns/*.appex`) are removed from the output by default and listed in `manifest.json`. Features that depend on them, such as notification handling, may not work.
@@ -91,7 +101,7 @@ To keep most extensions but drop one, add `--exclude-extension NotificationServi
 
 Each run creates a folder like `output/<app-name>-XXXXXX/` with the IPA, a patched copy of the app, and recovery reports. The prefix comes from the `.app` bundle name. Use `--work-dir` to change where it goes. If a run fails, the folder is kept so you can look at it.
 
-Signing is ad-hoc by default. `--identity 'Apple Development: …'` picks a different identity, and `--no-sign` skips signing (patching breaks the original signature either way). Only thin, little-endian 64-bit Mach-O files are supported. FAT and 32-bit binaries are rejected.
+Signing is ad-hoc by default. `--identity 'Apple Development: …'` picks a different identity, and `--no-sign` skips signing (patching breaks the original signature either way). Source app binaries must be thin, little-endian 64-bit Mach-O files. Universal injection libraries are supported by selecting a compatible architecture; FAT source apps and 32-bit binaries are rejected.
 
 ## Installing the IPA
 

@@ -3,7 +3,20 @@ import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat, wr
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { version } from "./package.json";
-import { log, pack, resolveApp, selectApp, dumpCore, execute, cleanupRun, checkCatalystTools, createCatalystApp } from "./src";
+import {
+  log,
+  pack,
+  resolveApp,
+  selectApp,
+  dumpCore,
+  execute,
+  cleanupRun,
+  checkCatalystTools,
+  createCatalystApp,
+  prepareInjection,
+  injectLibraries,
+} from "./src";
+import type { InjectionPlan } from "./src/inject";
 import { runMachO, type BundleInspection, type Recovery } from "./src/macho/run";
 
 const HELP_MESSAGE = `unipa: dump a running iOS app, recover its decrypted binaries, build an IPA
@@ -23,6 +36,7 @@ Options:
   --core-for <path=core>      Core for another binary in the bundle (repeatable)
   --keep-extensions           Keep PlugIns/*.appex (default: removed from the output)
   --exclude-extension <name>  Remove one extension, e.g. Name.appex (repeatable)
+  --inject <file>             Embed a local iOS dylib (repeatable; .gz and .xz supported)
   --identity <name>           codesign identity (default: ad-hoc)
   --macos                     Also build a standalone Mac Catalyst .app (experimental)
   --no-sign                   Skip signing (patching invalidates the original signature)
@@ -52,6 +66,7 @@ function parseOptions() {
       "wait-ms": { type: "string" },
       base: { type: "string" },
       identity: { type: "string" },
+      inject: { type: "string", multiple: true },
       "core-for": { type: "string", multiple: true },
       "keep-extensions": { type: "boolean" },
       "exclude-extension": { type: "string", multiple: true },
@@ -78,6 +93,7 @@ function parseOptions() {
   if (values.core && pid !== undefined) throw new Error("--core and --pid cannot be combined");
   if (values.base && !/^(0x[0-9a-f]+|\d+)$/i.test(values.base)) throw new Error("--base must be a valid address");
   if (values["no-sign"] && values.identity) throw new Error("--no-sign and --identity cannot be combined");
+  if (values.macos && values.inject?.length) throw new Error("--inject currently supports IPA output only; remove --macos");
   if (values.macos && values["no-sign"]) throw new Error("--macos requires signing; remove --no-sign");
   if (values.macos && values["keep-extensions"]) throw new Error("--macos does not support retained iOS extensions; remove --keep-extensions");
 
@@ -93,6 +109,7 @@ function parseOptions() {
     keepExtensions: values["keep-extensions"] ?? false,
     excludedExtensions: values["exclude-extension"] ?? [],
     coreOverrides: values["core-for"] ?? [],
+    injectedLibraries: values.inject ?? [],
   };
 }
 
@@ -215,6 +232,13 @@ async function main() {
 
   log.info(`Working directory: ${workspace}`);
   log.info(`App: ${source.name} (${source.bundle_id})`);
+
+  let injection: InjectionPlan | undefined;
+  if (options.injectedLibraries.length) {
+    log.info("Preparing injected libraries…");
+    injection = await prepareInjection(source.path, options.injectedLibraries, workspace);
+  }
+
   const app = path.join(workspace, "Payload", path.basename(source.path));
   await mkdir(path.dirname(app), { mode: 0o700 });
   await execute(["/usr/bin/ditto", source.path, app]);
@@ -281,13 +305,18 @@ async function main() {
   }
 
   const identity = options.identity;
-  const ipa = await pack(app, workspace, identity);
+  const injections = injection ? await injectLibraries(app, injection) : [];
+  for (const library of injections) {
+    log.success(`Injected ${library.binary}`);
+  }
+  const ipa = await pack(app, workspace, identity, injections);
   let macos = null;
   if (options.macos) {
     log.info("Converting a separate copy to Mac Catalyst…");
     macos = await createCatalystApp(app, path.join(workspace, "macos"), identity!);
     log.success(`Prepared and signed ${macos.binaries.length} binaries`);
   }
+
   const cleanup = await cleanupRun({ executable: source.executable, pid: dumpPid, generatedCore });
   await writeFile(
     path.join(workspace, "manifest.json"),
@@ -304,6 +333,7 @@ async function main() {
         },
         recoveries,
         excluded_extensions: excluded,
+        injections,
         identity: identity ?? null,
         ipa,
         macos,
@@ -314,9 +344,13 @@ async function main() {
     ),
     { mode: 0o600 },
   );
-  if (cleanup.errors.length > 0) process.exitCode = 1;
+
+  if (cleanup.errors.length > 0) {
+    process.exitCode = 1;
+  }
+  
   log.success(`IPA ready: ${ipa}`);
-  if (macos) log.success(`macOS app ready: ${macos.app}`);
+  macos && log.success(`macOS app ready: ${macos.app}`);
 }
 
 if (import.meta.main) {

@@ -3,13 +3,19 @@ import { lstat, rename } from "node:fs/promises";
 import { runMachO, type BundleInspection } from "./macho/run";
 import { log } from "./logger";
 import { execute } from "./process";
+import type { InjectedLibrary } from "./inject";
 
-export async function pack(app: string, workspace: string, identity: string | undefined): Promise<string> {
+export async function pack(app: string, workspace: string, identity: string | undefined, injections: InjectedLibrary[] = []): Promise<string> {
   const inspection = await runMachO<BundleInspection>("inspect-bundle", ["--app", app]);
   if (inspection.encrypted.length) throw new Error(`Encrypted files remain before packaging: ${inspection.encrypted.join(", ")}`);
 
   if (identity !== undefined) {
     log.info(`Signing (${identity === "-" ? "ad-hoc" : identity})…`);
+    for (const library of injections) {
+      const binary = path.join(app, library.binary);
+      await execute(["/usr/bin/codesign", "--force", "--sign", identity, binary]);
+      await execute(["/usr/bin/codesign", "--verify", "--strict", "--verbose=2", binary]);
+    }
     await execute(["/usr/bin/codesign", "--force", "--deep", "--sign", identity, app]);
     await execute(["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", app]);
     log.success("Signature verified");
