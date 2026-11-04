@@ -110,7 +110,7 @@ export async function dumpCore(options: DumpOptions): Promise<number> {
   const existing = await matchingProcesses(executable);
   if (pid === undefined && existing.length === 0) {
     log.info("Launching app…");
-    await execute(["/usr/bin/open", "-a", appPath]);
+    await execute(["/usr/bin/open", "-g", "-j", "-a", appPath]);
   }
 
   const targetPid = await waitForPid(executable, pid);
