@@ -1,5 +1,5 @@
 {
-  "name": "machkit",
+  "name": "unipa",
   "version": "1.1.0",
   "description": "Takes a core dump of an iOS app running on macOS, locates the encrypted Mach-O regions, extracts them from memory, patches copies of the executables, and produces an IPA containing `Payload/*.app`.",
   "private": true,
@@ -8,7 +8,7 @@
     "darwin"
   ],
   "bin": {
-    "machkit": "./index.ts"
+    "unipa": "./index.ts"
   },
   "scripts": {
     "start": "bun run index.ts",

@@ -1,4 +1,4 @@
-# machkit internals
+# unipa internals
 
 For requirements, compatibility, installation, and everyday usage, see the [README](../README.md).
 
@@ -6,13 +6,13 @@ For requirements, compatibility, installation, and everyday usage, see the [READ
 
 Apps are listed with `system_profiler`, and the executable name comes from `CFBundleExecutable`. Both the `Wrapper/*.app` layout and a plain iOS `.app` work.
 
-To find the running process, machkit first compares the executable's canonical path. macOS can launch wrapped iOS apps from a relocated `/private/var/folders/.../d/Wrapper/` path, so a different path is accepted only if the executable name and size match and the full SHA256 equals the selected app's executable. The verified runtime path is logged, and hashes are cached until the file metadata changes. A matching process is reused; if there is none, the app is launched.
+To find the running process, unipa first compares the executable's canonical path. macOS can launch wrapped iOS apps from a relocated `/private/var/folders/.../d/Wrapper/` path, so a different path is accepted only if the executable name and size match and the full SHA256 equals the selected app's executable. The verified runtime path is logged, and hashes are cached until the file metadata changes. A matching process is reused; if there is none, the app is launched.
 
 ## Recovery
 
 `src/macho/run.ts` calls the Python CLI (`src/macho/cli.py`), which handles the commands and recovery files. `src/macho/reader.py` parses Mach-O files, reads core memory, and patches bytes.
 
-`cryptoff` is a file offset. machkit looks for the segment that contains the **entire** encrypted range rather than assuming `__TEXT` or a fixed base:
+`cryptoff` is a file offset. unipa looks for the segment that contains the **entire** encrypted range rather than assuming `__TEXT` or a fixed base:
 
 ```text
 preferred_header_address = header_segment.vmaddr - header_segment.fileoff
@@ -32,7 +32,7 @@ Missing core pages are never zero-filled; reads continue across adjacent segment
 If more than one valid candidate remains, the run stops. Look at `recovery/000/analysis.json` in the work folder, then pick one explicitly:
 
 ```bash
-machkit \
+unipa \
   --app /Applications/Example.app \
   --core /tmp/example.core \
   --base 0x102e1c000
@@ -64,7 +64,7 @@ App-patched.ipa                  Verified ZIP containing only Payload
 
 Failed runs keep their work folder. If the base is ambiguous or missing, `analysis.json` is there to explain why. Python outputs never overwrite existing files, so use a new recovery folder to retry.
 
-machkit is macOS-only (`os: ["darwin"]`) and exits on any other system before doing any work. The host's macOS version, build, and architecture are saved under `host` in `source.json` and `manifest.json`, but no version cutoff is enforced. With an existing core, `host` describes the current machine, which may not be where the dump came from. For live-dump version limits, see [Compatibility](../README.md#compatibility).
+unipa is macOS-only (`os: ["darwin"]`) and exits on any other system before doing any work. The host's macOS version, build, and architecture are saved under `host` in `source.json` and `manifest.json`, but no version cutoff is enforced. With an existing core, `host` describes the current machine, which may not be where the dump came from. For live-dump version limits, see [Compatibility](../README.md#compatibility).
 
 ## Signing and permissions
 
@@ -78,7 +78,7 @@ The Mac Catalyst app, window size, signing, and conversion reports are covered i
 
 ## Cleanup
 
-After the IPA passes signing and archive checks (and the macOS conversion succeeds, if requested), machkit confirms the dumped process still runs the selected executable, then sends `SIGKILL` to that exact PID and deletes the core from that run. If recovery or packaging fails, the app and core stay in place.
+After the IPA passes signing and archive checks (and the macOS conversion succeeds, if requested), unipa confirms the dumped process still runs the selected executable, then sends `SIGKILL` to that exact PID and deletes the core from that run. If recovery or packaging fails, the app and core stay in place.
 
 Cores passed with `--core` or `--core-for` are never deleted, and runs with an existing core never launch or close an app. Cleanup results are saved in `manifest.json`. If cleanup fails, the verified IPA is kept, a warning is shown, and the exit code is nonzero.
 
@@ -113,4 +113,4 @@ python3 -B src/macho/cli.py recover --binary /path/to/executable --core /path/to
 python3 -B src/macho/cli.py patch --binary /path/to/executable --region /tmp/new-recovery/region.bin --output /tmp/new-executable
 ```
 
-`MACHKIT_PYTHON=/path/to/python3` selects the Python interpreter. The tests use synthetic Mach-O files and cores, so they never launch a real app or use `sudo`. The macOS integration tests rely on `xcrun clang`, `codesign`, `ditto`, and `unzip`.
+`UNIPA_PYTHON=/path/to/python3` selects the Python interpreter. The tests use synthetic Mach-O files and cores, so they never launch a real app or use `sudo`. The macOS integration tests rely on `xcrun clang`, `codesign`, `ditto`, and `unzip`.

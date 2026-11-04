@@ -6,12 +6,12 @@ import { version } from "./package.json";
 import { log, pack, resolveApp, selectApp, dumpCore, execute, cleanupRun, checkCatalystTools, createCatalystApp } from "./src";
 import { runMachO, type BundleInspection, type Recovery } from "./src/macho/run";
 
-const HELP_MESSAGE = `machkit: dump a running iOS app, recover its decrypted binaries, build an IPA
+const HELP_MESSAGE = `unipa: dump a running iOS app, recover its decrypted binaries, build an IPA
 
 Usage:
-  machkit [options]
-  machkit --app /Applications/Example.app
-  machkit --app /Applications/Example.app --core /tmp/example.core
+  unipa [options]
+  unipa --app /Applications/Example.app
+  unipa --app /Applications/Example.app --core /tmp/example.core
 
 Options:
   --app <path>                Reference app to process (default: choose from a list)
@@ -30,7 +30,7 @@ Options:
   --help                      Show this help
 
 sudo is used only for gcore and for changing ownership of the core file.
-macOS only. Requires Python 3.10+. Set MACHKIT_PYTHON to choose the interpreter.
+macOS only. Requires Python 3.10+. Set UNIPA_PYTHON to choose the interpreter.
 `;
 
 function readNonNegativeInteger(value: string | undefined, fallback: number, name: string): number {
@@ -68,7 +68,7 @@ function parseOptions() {
   }
 
   if (values.version) {
-    console.log(`machkit ${version}`);
+    console.log(`unipa ${version}`);
     return;
   }
 
@@ -193,7 +193,7 @@ async function getHostInfo() {
 
 async function main() {
   if (process.platform !== "darwin") {
-    throw new Error("machkit is only supported on macOS.");
+    throw new Error("unipa is only supported on macOS.");
   }
 
   const options = parseOptions();

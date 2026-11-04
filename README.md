@@ -1,8 +1,8 @@
-# machkit
+# unipa
 
 Takes a running iOS app on an Apple Silicon Mac, pulls its decrypted code out of a core dump, and builds an IPA from it. The installed app is never modified.
 
-> **Disclaimer:** machkit is provided "as is", without warranty. Use it at your own risk and only on apps you own or are authorized to analyze. To the extent permitted by applicable law, the authors and contributors accept no liability for damage, data loss, or other consequences of its use. You are responsible for how you use the tool and the files it produces.
+> **Disclaimer:** unipa is provided "as is", without warranty. Use it at your own risk and only on apps you own or are authorized to analyze. To the extent permitted by applicable law, the authors and contributors accept no liability for damage, data loss, or other consequences of its use. You are responsible for how you use the tool and the files it produces.
 
 ## Requirements
 
@@ -16,42 +16,42 @@ Takes a running iOS app on an Apple Silicon Mac, pulls its decrypted code out of
 
 iOS apps have run natively on Apple Silicon Macs since [Big Sur](https://developer.apple.com/videos/play/wwdc2020/10114/), though individual apps may need a newer macOS.
 
-Dumping a live process is a separate matter. It relies on a privileged entitlement in the system `gcore`, which [FFRI's research](https://www.ffri.jp/wp-content/uploads/2026/01/gcore.pdf) found in macOS 15.0 and which was removed in 15.3. That points to 15.0 through 15.2 as the working window. Only 15.0 (build 24A8332) has been tested with machkit, so treat the other releases as unconfirmed.
+Dumping a live process is a separate matter. It relies on a privileged entitlement in the system `gcore`, which [FFRI's research](https://www.ffri.jp/wp-content/uploads/2026/01/gcore.pdf) found in macOS 15.0 and which was removed in 15.3. That points to 15.0 through 15.2 as the working window. Only 15.0 (build 24A8332) has been tested with unipa, so treat the other releases as unconfirmed.
 
-machkit logs your macOS version but does not block any release. A successful startup does not mean the dump will work.
+unipa logs your macOS version but does not block any release. A successful startup does not mean the dump will work.
 
 ## Install
 
 ```bash
-git clone https://github.com/cayank/machkit
-cd machkit
+git clone https://github.com/cayank/unipa
+cd unipa
 bun install
 bun link
 ```
 
-After that, `machkit` works from any directory. The link points to this checkout, so do not move the folder. `bun unlink` removes it.
+After that, `unipa` works from any directory. The link points to this checkout, so do not move the folder. `bun unlink` removes it.
 
-Check the installed version with `machkit --version`.
+Check the installed version with `unipa --version`.
 
 ## Usage
 
-Run `machkit` with no arguments to pick an iOS App Store app from `/Applications/`, or pass the path yourself:
+Run `unipa` with no arguments to pick an iOS App Store app from `/Applications/`, or pass the path yourself:
 
 ```bash
-machkit --app /Applications/Example.app
-machkit --app /Applications/Example.app --pid 12345 --wait-ms 5000
+unipa --app /Applications/Example.app
+unipa --app /Applications/Example.app --pid 12345 --wait-ms 5000
 ```
 
-If the app is already running, machkit uses that process. Otherwise it launches the app. `--pid` picks a specific process, and `--wait-ms` sets how long to wait before dumping. Taking a new core may ask for your `sudo` password.
+If the app is already running, unipa uses that process. Otherwise it launches the app. `--pid` picks a specific process, and `--wait-ms` sets how long to wait before dumping. Taking a new core may ask for your `sudo` password.
 
 <!-- <a href="docs/cli-example.jpg">
-  <img src="docs/cli-example.jpg" alt="machkit recovering an app and producing an IPA" width="720">
+  <img src="docs/cli-example.jpg" alt="unipa recovering an app and producing an IPA" width="720">
 </a> -->
 
 To retry patching and packaging from a core you already have, no app launch needed:
 
 ```bash
-machkit --app /Applications/Example.app --core /tmp/example.core
+unipa --app /Applications/Example.app --core /tmp/example.core
 ```
 
 ### Mac app (experimental)
@@ -59,7 +59,7 @@ machkit --app /Applications/Example.app --core /tmp/example.core
 `--macos` also produces a Mac Catalyst app that runs directly on your Mac:
 
 ```bash
-machkit --app /Applications/Example.app --macos
+unipa --app /Applications/Example.app --macos
 ```
 
 ```text
@@ -78,7 +78,7 @@ App extensions (`PlugIns/*.appex`) are removed from the output by default and li
 To keep them, use `--keep-extensions`. An encrypted extension can run in its own process, so it may need a separate dump, which you pass with `--core-for`:
 
 ```bash
-machkit \
+unipa \
   --app /Applications/Example.app \
   --core /tmp/example.core \
   --keep-extensions \
@@ -99,7 +99,7 @@ The ad-hoc signature is not enough to install on an iPhone or iPad. You will nee
 
 ## Cleanup
 
-Once everything passes verification, machkit force-quits the app process it dumped and deletes the core it created. If recovery, packaging, or the macOS conversion fails, both are left in place so you can investigate.
+Once everything passes verification, unipa force-quits the app process it dumped and deletes the core it created. If recovery, packaging, or the macOS conversion fails, both are left in place so you can investigate.
 
 Cores you supply with `--core` or `--core-for` are never deleted, and runs that use an existing core never launch or close an app. If cleanup itself fails, the IPA is kept, the error is written to `manifest.json`, and the exit code is nonzero.
 

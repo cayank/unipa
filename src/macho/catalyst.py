@@ -24,7 +24,7 @@ VERSION_COMMANDS = {0x24: MACOS, 0x25: IOS}
 DYLIB_COMMANDS = {0xC, 0x80000018, 0x8000001F, 0x80000023}
 SWIFT_UIKIT = "@rpath/libswiftUIKit.dylib"
 CATALYST_SWIFT_UIKIT = "/System/iOSSupport/usr/lib/swift/libswiftUIKit.dylib"
-RUNTIME_LIBRARY = "@executable_path/Frameworks/MachkitRuntime.dylib"
+RUNTIME_LIBRARY = "@executable_path/Frameworks/UnipaRuntime.dylib"
 
 
 @dataclass(frozen=True)
@@ -102,7 +102,7 @@ def signing_targets(app: Path, binaries: list[Binary], executable: Path) -> list
 def add_runtime_hooks(executable: Path, app: Path) -> Binary:
     sdk = Path(run_tool("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"))
     hooks = Path(__file__).resolve().parents[1] / "hooks"
-    library = app / "Frameworks" / "MachkitRuntime.dylib"
+    library = app / "Frameworks" / "UnipaRuntime.dylib"
     library.parent.mkdir(exist_ok=True)
     if library.exists():
         raise MachOError(f"Runtime helper already exists: {library}")
@@ -194,20 +194,20 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
         "source": str(source),
         "app": str(output),
         "original_bundle_id": bundle_id,
-        "bundle_id": f"{bundle_id}.machkitlocal",
+        "bundle_id": f"{bundle_id}.unipalocal",
         "identity": identity,
         "binaries": [],
         "signed_targets": [],
         "runtime": {
             "working_directory": "/",
-            "library": "Frameworks/MachkitRuntime.dylib",
+            "library": "Frameworks/UnipaRuntime.dylib",
         },
         "window_geometry": {
             "width": 390,
             "height": 844,
             "resizable": True,
             "lock_aspect_ratio": True,
-            "library": "Frameworks/MachkitRuntime.dylib",
+            "library": "Frameworks/UnipaRuntime.dylib",
         },
     }
     write_json(report_path, report)

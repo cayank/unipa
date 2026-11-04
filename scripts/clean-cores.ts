@@ -46,7 +46,7 @@ function formatSize(bytes: number): string {
 }
 
 async function main(): Promise<void> {
-  if (process.platform !== "darwin") throw new Error("machkit is only supported on macOS.");
+  if (process.platform !== "darwin") throw new Error("unipa is only supported on macOS.");
 
   const { values: options } = parseArgs({
     args: Bun.argv.slice(2),

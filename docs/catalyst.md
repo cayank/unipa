@@ -4,17 +4,17 @@
 
 ## How it works
 
-Before dumping, machkit checks that `vtool`, `install_name_tool`, and `clang` are installed. Once the IPA is verified, it runs the Python converter (`src/macho/catalyst.py`) on the copy.
+Before dumping, unipa checks that `vtool`, `install_name_tool`, and `clang` are installed. Once the IPA is verified, it runs the Python converter (`src/macho/catalyst.py`) on the copy.
 
 Every binary must be a decrypted, thin arm64 Mach-O file, and the main executable must target iOS or Mac Catalyst. Kept iOS extensions are rejected. The converter uses `vtool` to retag iOS build-version commands as Mac Catalyst (minimum version 11.0, SDK 14.0). Libraries that are already Mac Catalyst or native macOS keep their platform. This only changes metadata: the code is not recompiled, and nothing guarantees it will run on those OS versions.
 
 References to `@rpath/libswiftUIKit.dylib` are rewritten to `/System/iOSSupport/usr/lib/swift/libswiftUIKit.dylib`. Each binary is checked again for platform and library paths before signing.
 
-Hooks in `src/hooks/` are compiled into `MachkitRuntime.dylib` and added to the executable as a load command. If the Mach-O header has no room for it, conversion stops.
+Hooks in `src/hooks/` are compiled into `UnipaRuntime.dylib` and added to the executable as a load command. If the Mach-O header has no room for it, conversion stops.
 
 ## Bundle settings
 
-App and display names stay the same. The bundle identifier gets a `.machkitlocal` suffix, which may break apps that depend on it. Entitlements are replaced with a sandbox profile that allows outgoing network connections. The original entitlements are dropped, so keychain groups, push notifications, App Groups, and similar features may need extra provisioning or changes to the app.
+App and display names stay the same. The bundle identifier gets a `.unipalocal` suffix, which may break apps that depend on it. Entitlements are replaced with a sandbox profile that allows outgoing network connections. The original entitlements are dropped, so keychain groups, push notifications, App Groups, and similar features may need extra provisioning or changes to the app.
 
 ## Compatibility sandbox
 
@@ -42,4 +42,4 @@ macos/entitlements.plist  Entitlements used for the outer app
 
 The `.app` appears under its final name only after verification passes. Successful conversions are recorded under `macos` in `manifest.json`; normal runs set it to `null`.
 
-If conversion fails, the verified IPA, the conversion report, and the unfinished app copy are kept, and automatic app and core cleanup is skipped. machkit never installs or launches the generated app. The IPA still needs signing and provisioning for wherever you install it.
+If conversion fails, the verified IPA, the conversion report, and the unfinished app copy are kept, and automatic app and core cleanup is skipped. unipa never installs or launches the generated app. The IPA still needs signing and provisioning for wherever you install it.

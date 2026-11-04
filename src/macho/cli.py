@@ -205,5 +205,5 @@ if __name__ == "__main__":
     try:
         main()
     except (OSError, ValueError, plistlib.InvalidFileException) as error:
-        print(f"machkit: {error}", file=sys.stderr)
+        print(f"unipa: {error}", file=sys.stderr)
         sys.exit(1)

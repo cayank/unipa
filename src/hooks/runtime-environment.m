@@ -5,6 +5,6 @@
 // A writable current directory can trigger jailbreak checks
 __attribute__((constructor)) static void configureWorkingDirectory(void) {
     if (chdir("/") != 0) {
-        NSLog(@"machkit: Could not set the working directory to /");
+        NSLog(@"unipa: Could not set the working directory to /");
     }
 }
