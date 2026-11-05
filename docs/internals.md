@@ -76,7 +76,7 @@ unipa is macOS-only (`os: ["darwin"]`) and exits on any other system before doin
 
 ## Signing and permissions
 
-The default signature is ad-hoc (`codesign --force --deep --sign -`), followed by `codesign --verify --deep --strict`. Use `--identity 'Apple Development: …'` to pick another identity. `--no-sign` only skips signing, and patching invalidates the original signature either way. IPA provisioning remains external. Mac conversion replaces entitlements with the generated sandbox and optional Keychain settings described in [macOS conversion](catalyst.md).
+The default signature is ad-hoc (`codesign --force --deep --sign -`), followed by `codesign --verify --deep --strict`. Use `--identity 'Apple Development: …'` to pick another identity. `--no-sign` only skips signing, and patching invalidates the original signature either way. IPA provisioning remains external. Mac conversion replaces entitlements with the generated sandbox, location, and optional Keychain settings described in [macOS conversion](catalyst.md).
 
 > Some apps produce incomplete core dumps because `gcore` cannot read a memory mapping. unipa attempts recovery from the captured data and stops if required bytes are missing.
 

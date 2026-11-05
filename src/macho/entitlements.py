@@ -1,4 +1,4 @@
-"""Sandbox settings for converted apps."""
+"""Sandbox settings for converted apps"""
 
 from pathlib import Path
 
@@ -50,8 +50,22 @@ def compatibility_sandbox() -> dict:
         "denied_directories": list(DENIED_DIRECTORIES),
     }
 
+# preserve declared location access and supply the macOS purpose string
+def configure_location_access(info: dict) -> bool:
+    for key in (
+        "NSLocationUsageDescription",
+        "NSLocationWhenInUseUsageDescription",
+        "NSLocationAlwaysAndWhenInUseUsageDescription",
+        "NSLocationAlwaysUsageDescription",
+    ):
+        description = info.get(key)
+        if isinstance(description, str) and description.strip():
+            info["NSLocationUsageDescription"] = description
+            return True
+    return False
+
 # restrict host features that an iOS app may mistake for a jailbreak
-def macos_entitlements(keychain_database: Path | None = None) -> dict:
+def macos_entitlements(keychain_database: Path | None = None, *, location: bool = False) -> dict:
     rules = ["(deny process-fork)"]
     operations = "file* file-read* file-read-metadata file-ioctl"
     rules.extend(f'(deny {operations} (literal "{path}"))' for path in DENIED_FILES)
@@ -63,6 +77,9 @@ def macos_entitlements(keychain_database: Path | None = None) -> dict:
         "com.apple.security.network.client": True,
         "com.apple.security.temporary-exception.sbpl": rules,
     }
+
+    if location:
+        entitlements["com.apple.security.personal-information.location"] = True
 
     if keychain_database is not None:
         relative = keychain_database.relative_to(Path.home())

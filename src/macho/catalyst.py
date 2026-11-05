@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from entitlements import compatibility_sandbox, macos_entitlements
+from entitlements import compatibility_sandbox, configure_location_access, macos_entitlements
 from reader import MachO, MachOError
 from load_commands import add_dylibs, build_platform, dylib_names
 from bundle import app_filename, bundle_settings, converted_bundle_id
@@ -243,12 +243,13 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
                     run_tool("/usr/bin/plutil", "-replace", key, "-string", settings["name"], str(localized))
         info.pop("UISupportedInterfaceOrientations~ipad", None)
         info.pop("UISupportedInterfaceOrientations~iphone", None)
+        location_access = configure_location_access(info)
         info_path.write_bytes(plistlib.dumps(info, fmt=plistlib.FMT_BINARY))
         entitlements = output_dir / "entitlements.plist"
         if keychain:
             prepare_keychain_directory(keychain)
         entitlements.write_bytes(plistlib.dumps(macos_entitlements(
-            Path(keychain["database"]) if keychain else None
+            Path(keychain["database"]) if keychain else None, location=location_access
         )))
         entitlements.chmod(0o600)
         report["compatibility_sandbox"] = compatibility_sandbox()

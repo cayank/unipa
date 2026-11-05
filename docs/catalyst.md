@@ -18,7 +18,7 @@ The Mac app filename uses the source app's display name, falling back to its bun
 
 `--bundle-id` and `--bundle-name` are shared with IPA output. See [bundle settings](bundle.md) for random and exact values, naming, nested IDs, and signing implications.
 
-Entitlements are replaced with a sandbox profile that allows outgoing network connections. Optional isolated Keychain storage adds access to the selected database. Original entitlements are dropped, so push notifications, App Groups, and other provisioned features may need additional configuration.
+Entitlements are replaced with a sandbox profile that allows outgoing network connections and declared location access. Optional isolated Keychain storage adds access to the selected database. Original entitlements are dropped, so push notifications, App Groups, and other provisioned features may need additional configuration.
 
 ## Optional Keychain storage
 
@@ -29,6 +29,12 @@ Entitlements are replaced with a sandbox profile that allows outgoing network co
 Every macOS conversion automatically adds sandbox rules from `src/macho/entitlements.py`. They deny process forking and access to common shell, SSH, and jailbreak-related paths that iOS apps may mistake for a jailbroken device. No extra flag is needed. The applied restrictions are listed under `compatibility_sandbox` in the conversion report and manifest.
 
 These restrictions apply only to the generated Mac app. They reduce filesystem-based false positives; app-specific signature checks or other detection methods may still reject the converted app.
+
+## Location access
+
+When the source app declares a nonempty location usage description, conversion enables the macOS sandbox location entitlement. Existing purpose strings are preserved; if only an iOS purpose string exists, it also supplies `NSLocationUsageDescription` for macOS. Apps without a declared purpose receive no location entitlement.
+
+This lets the app use the normal macOS authorization flow; it does not grant permission or reset previous decisions. The app must still request or start location access. A missing prompt does not establish that permission was granted. Check System Settings → Privacy & Security → Location Services for the generated app.
 
 ## Working directory
 
