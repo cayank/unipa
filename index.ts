@@ -110,7 +110,7 @@ function parseOptions() {
   if (values.core && pid !== undefined) throw new Error("--core and --pid cannot be combined");
   if (values.base && !/^(0x[0-9a-f]+|\d+)$/i.test(values.base)) throw new Error("--base must be a valid address");
   if (values["no-sign"] && values.identity) throw new Error("--no-sign and --identity cannot be combined");
-  if (values.macos && values.inject?.length) throw new Error("--inject currently supports IPA output only; remove --macos");
+  // if (values.macos && values.inject?.length) throw new Error("--inject currently supports IPA output only; remove --macos");
   if (values.macos && values["no-sign"]) throw new Error("--macos requires signing; remove --no-sign");
   if (values.macos && values["keep-extensions"]) throw new Error("--macos does not support retained iOS extensions; remove --keep-extensions");
 

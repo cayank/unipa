@@ -1,6 +1,6 @@
 # Dylib injection
 
-`--inject` embeds local iOS dynamic libraries into the generated IPA. The main executable loads them when the rebuilt app starts. Injection runs after recovery and before signing. The source app and supplied libraries are kept unchanged.
+`--inject` embeds local iOS dynamic libraries into the generated IPA and, with `--macos`, the separate Mac copy. The main executable loads them when the rebuilt app starts. Injection runs after recovery and before signing. The source app and supplied libraries are kept unchanged.
 
 ```bash
 unipa \
@@ -17,7 +17,17 @@ Inputs can be `.dylib`, `.dylib.gz`, or `.dylib.xz`. Compressed files are unpack
 
 Libraries are checked and staged before a new core dump is taken. The executable must have enough unused Mach-O header space for the load commands; unipa stops if it cannot add them without moving existing contents. Existing bundle files and duplicate destination names are never overwritten.
 
-Only the main executable receives load commands. Extensions are not injected. `--inject` cannot be combined with `--macos` yet. Dependencies required by a custom dylib must also be available in the app or provided by iOS.
+Only the main executable receives load commands. Extensions are not injected. Dependencies required by a custom dylib must also be available in the app or provided by the target platform.
+
+## Mac output
+
+Combine injection with `--macos` to produce both outputs:
+
+```bash
+unipa --app /Applications/Example.app --inject ./dylibs/unipa-flex.dylib --macos
+```
+
+The IPA keeps the injected iOS library. The separate Mac copy retags it along with the other iOS binaries as part of [Mac Catalyst conversion](catalyst.md). Conversion requires thin arm64 binaries after architecture selection. Retagging does not make every iOS library or dependency compatible with macOS; verify its runtime and signing requirements.
 
 ## Building FLEX
 

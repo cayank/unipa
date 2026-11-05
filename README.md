@@ -91,7 +91,7 @@ Use `--inject` to embed a local iOS dylib into the output app. Repeat the flag f
 unipa --app /Applications/Example.app --inject ./dylibs/unipa-flex.dylib
 ```
 
-Keep downloaded libraries in the Git-ignored `dylibs/` directory, or pass a file from any other location. Injection currently supports IPA output and cannot be combined with `--macos`. See [dylib injection](docs/injection.md) for configuration, architecture selection, and signing details.
+Keep downloaded libraries in the Git-ignored `dylibs/` directory, or pass a file from any other location. Add `--macos` to convert the injected copy into a Mac app as well; the library and its dependencies must be compatible with conversion. See [dylib injection](docs/injection.md) for configuration, architecture selection, and signing details.
 
 ## Extensions
 
