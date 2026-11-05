@@ -213,9 +213,11 @@ export async function waitForPid(executable: string, requested?: number): Promis
     await Bun.sleep(250);
   } while (Date.now() < deadline);
 
-  throw new Error(
-    `No verified process found within 15 seconds for ${executable}. ` +
-      "Try opening the app manually, then retry with --pid <PID>. " +
-      "Relocated executables must have identical SHA256 contents.",
-  );
+  const errorMessage = [
+    `No verified process found within 15 seconds for ${executable}.`,
+    "Try opening the app manually, then retry with --pid <PID>.",
+    "Relocated executables must have identical SHA256 contents.",
+  ];
+
+  throw new Error(errorMessage.join(" "));
 }
