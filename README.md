@@ -79,6 +79,8 @@ output/example-XXXXXX/
     └── Example.app
 ```
 
+Add `--isolated-keychain` for independent local storage, or `--keychain-instance <name>` for another persistent instance. See [Keychain storage](docs/keychain.md) for compatibility and security limits.
+
 It needs the Xcode Command Line Tools (`xcode-select --install`) and cannot be combined with `--no-sign` or `--keep-extensions`. See [macOS conversion](docs/catalyst.md) for details and known limits.
 
 ### Dylib injection

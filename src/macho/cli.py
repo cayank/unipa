@@ -169,6 +169,7 @@ def parse_args() -> argparse.Namespace:
     macos.add_argument("--app", type=Path, required=True)
     macos.add_argument("--output-dir", type=Path, required=True)
     macos.add_argument("--identity", default="-")
+    macos.add_argument("--keychain-instance")
     macos.add_argument("--bundle-id", nargs="?", const="")
     macos.add_argument("--bundle-name", nargs="?", const="")
 
@@ -211,7 +212,7 @@ def run_command(args: argparse.Namespace) -> dict:
         return configure_bundle(args.app, args.bundle_id, args.bundle_name)
 
     if args.command == "convert-macos":
-        return convert_bundle(inspect_bundle(args.app), args.output_dir, args.identity, args.bundle_id, args.bundle_name)
+        return convert_bundle(inspect_bundle(args.app), args.output_dir, args.identity, args.keychain_instance, args.bundle_id, args.bundle_name)
 
     if args.command == "prepare-injection":
         return prepare_injection(bundle_info(args.app), args.dylib, args.output_dir)

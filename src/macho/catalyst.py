@@ -14,6 +14,7 @@ from entitlements import compatibility_sandbox, macos_entitlements
 from reader import MachO, MachOError
 from load_commands import add_dylibs, build_platform, dylib_names
 from bundle import app_filename, bundle_settings, converted_bundle_id
+from keychain import keychain_configuration, prepare_keychain_directory
 
 ARM64 = 0x100000C
 MACOS = 1
@@ -72,13 +73,20 @@ def signing_targets(app: Path, binaries: list[Binary], executable: Path) -> list
                 targets.add(parent)
     return sorted(targets, key=lambda target: (-len(target.parts), str(target)))
 
-def add_runtime_hooks(executable: Path, app: Path) -> Binary:
+def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = False) -> Binary:
     sdk = Path(run_tool("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"))
     hooks = Path(__file__).resolve().parents[1] / "hooks"
     library = app / "Frameworks" / "UnipaRuntime.dylib"
     library.parent.mkdir(exist_ok=True)
     if library.exists():
         raise MachOError(f"Runtime helper already exists: {library}")
+
+    keychain_sources = []
+    if isolated_keychain:
+        keychain_sources = [
+            "-framework", "Security", "-lsqlite3",
+            str(hooks / "keychain.m"), str(hooks.parent / "keychain/store.m"),
+        ]
 
     run_tool(
         "/usr/bin/xcrun",
@@ -97,6 +105,7 @@ def add_runtime_hooks(executable: Path, app: Path) -> Binary:
         "-Wl,-install_name," + RUNTIME_LIBRARY,
         str(hooks / "window-geometry.m"),
         str(hooks / "runtime-environment.m"),
+        *keychain_sources,
         "-o",
         str(library),
     )
@@ -104,7 +113,7 @@ def add_runtime_hooks(executable: Path, app: Path) -> Binary:
     executable.write_bytes(add_dylibs(executable.read_bytes(), [RUNTIME_LIBRARY]))
     return inspect_binary(library, app)
 
-def convert_bundle(inspection: dict, output_dir: Path, identity: str,
+def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_instance: str | None = None,
                    bundle_id_override: str | None = None, bundle_name: str | None = None) -> dict:
     source = Path(inspection["path"])
     output_dir = output_dir.resolve()
@@ -121,10 +130,19 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str,
     if not isinstance(bundle_id, str) or not bundle_id:
         raise MachOError("macOS conversion requires a CFBundleIdentifier")
 
-    default_id = converted_bundle_id(bundle_id, None)
+    default_id = converted_bundle_id(bundle_id, keychain_instance)
     settings = bundle_settings(
         bundle_id, inspection["name"], default_id if bundle_id_override is None else bundle_id_override, bundle_name
     )
+    storage_id = settings["bundle_id"] if bundle_id_override is not None else bundle_id
+    keychain = keychain_configuration(storage_id, keychain_instance) if keychain_instance is not None else None
+    if keychain:
+        keychain_instance = keychain["instance"]
+        for item in inspection["binaries"]:
+            libraries = dylib_names(MachO(Path(item).read_bytes()))
+            if Path(item).name == "PlayTools" or any("PlayTools.framework/" in name for name in libraries):
+                raise MachOError("Isolated Keychain cannot be combined with PlayTools; use the original decrypted app")
+
     binaries = [inspect_binary(Path(item), source) for item in inspection["binaries"]]
     main_relative = Path(inspection["executable"]).relative_to(source)
     main = next(binary for binary in binaries if binary.relative == main_relative)
@@ -146,6 +164,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str,
         "original_bundle_id": bundle_id,
         "bundle_id": settings["bundle_id"],
         "name": settings["name"],
+        "keychain": keychain,
         "identity": identity,
         "binaries": [],
         "signed_targets": [],
@@ -211,6 +230,10 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str,
                 "UISupportedInterfaceOrientations": ["UIInterfaceOrientationPortrait"],
             }
         )
+        if keychain:
+            info["UnipaKeychain"] = {"BundleIdentifier": keychain["bundle_id"], "Instance": keychain_instance}
+        else:
+            info.pop("UnipaKeychain", None)
         if bundle_name is not None:
             info["CFBundleName"] = settings["name"]
             info["CFBundleDisplayName"] = settings["name"]
@@ -222,12 +245,16 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str,
         info.pop("UISupportedInterfaceOrientations~iphone", None)
         info_path.write_bytes(plistlib.dumps(info, fmt=plistlib.FMT_BINARY))
         entitlements = output_dir / "entitlements.plist"
-        entitlements.write_bytes(plistlib.dumps(macos_entitlements()))
+        if keychain:
+            prepare_keychain_directory(keychain)
+        entitlements.write_bytes(plistlib.dumps(macos_entitlements(
+            Path(keychain["database"]) if keychain else None
+        )))
         entitlements.chmod(0o600)
         report["compatibility_sandbox"] = compatibility_sandbox()
 
         executable = pending / main_relative
-        helper = add_runtime_hooks(executable, pending)
+        helper = add_runtime_hooks(executable, pending, keychain is not None)
         binaries.append(helper)
         report_binary = {
             "binary": str(helper.relative),

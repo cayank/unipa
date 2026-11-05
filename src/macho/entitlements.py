@@ -1,5 +1,7 @@
 """Sandbox settings for converted apps."""
 
+from pathlib import Path
+
 DENIED_FILES = (
     "/.cydia_no_stash",
     "/bin/bash",
@@ -49,15 +51,25 @@ def compatibility_sandbox() -> dict:
     }
 
 # restrict host features that an iOS app may mistake for a jailbreak
-def macos_entitlements() -> dict:
+def macos_entitlements(keychain_database: Path | None = None) -> dict:
     rules = ["(deny process-fork)"]
     operations = "file* file-read* file-read-metadata file-ioctl"
     rules.extend(f'(deny {operations} (literal "{path}"))' for path in DENIED_FILES)
     rules.extend(
         f'(deny {operations} (subpath "{path}"))' for path in DENIED_DIRECTORIES
     )
-    return {
+    entitlements = {
         "com.apple.security.app-sandbox": True,
         "com.apple.security.network.client": True,
         "com.apple.security.temporary-exception.sbpl": rules,
     }
+
+    if keychain_database is not None:
+        relative = keychain_database.relative_to(Path.home())
+        entitlements["com.apple.security.temporary-exception.files.home-relative-path.read-write"] = [
+            f"/{relative}{suffix}" for suffix in ("", "-journal", "-wal", "-shm")
+        ]
+        entitlements["com.apple.security.temporary-exception.files.home-relative-path.read-only"] = [
+            f"/{relative.parent}"
+        ]
+    return entitlements

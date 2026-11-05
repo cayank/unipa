@@ -42,6 +42,8 @@ Options:
   --identity <name>           codesign identity (default: ad-hoc)
   --bundle-id [id]            Set the output bundle ID (random generates a suffix)
   --bundle-name [name]        Set the output app name (random generates a suffix)
+  --isolated-keychain         Use independent Keychain storage for --macos output
+  --keychain-instance <name>  Select <name>.db (default: default.db)
   --macos                     Also build a standalone Mac Catalyst .app (experimental)
   --no-sign                   Skip signing (patching invalidates the original signature)
   --version                   Show version
@@ -85,6 +87,8 @@ function parseOptions() {
       macos: { type: "boolean" },
       "bundle-id": { type: "string" },
       "bundle-name": { type: "string" },
+      "isolated-keychain": { type: "boolean" },
+      "keychain-instance": { type: "string" },
       version: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
@@ -120,7 +124,16 @@ function parseOptions() {
     throw new Error("--bundle-name must be an app name without path separators or control characters (maximum 251 UTF-8 bytes)");
   }
 
+  const isolatedKeychain = values["isolated-keychain"] || values["keychain-instance"] !== undefined;
+  if (isolatedKeychain && !values.macos) throw new Error("Isolated Keychain requires --macos");
+
+  const keychainInstance = isolatedKeychain ? (values["keychain-instance"] ?? "default") : undefined;
+  if (keychainInstance !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(keychainInstance)) {
+    throw new Error("--keychain-instance must be 1–64 letters, digits, dots, underscores, or hyphens, starting with a letter or digit");
+  }
+
   return {
+    keychainInstance,
     bundleId: values["bundle-id"],
     bundleName: values["bundle-name"],
     appPath: values.app,
@@ -358,7 +371,7 @@ async function main() {
   let macos = null;
   if (options.macos) {
     log.info("Converting a separate copy to Mac Catalyst…");
-    macos = await createCatalystApp(app, path.join(workspace, "macos"), identity!, {
+    macos = await createCatalystApp(app, path.join(workspace, "macos"), identity!, options.keychainInstance, {
       id: options.bundleId !== undefined ? bundle!.bundle_id : undefined,
     });
     log.info(`Mac app: ${macos.name} (${macos.bundle_id})`);

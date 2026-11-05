@@ -76,7 +76,7 @@ unipa is macOS-only (`os: ["darwin"]`) and exits on any other system before doin
 
 ## Signing and permissions
 
-The default signature is ad-hoc (`codesign --force --deep --sign -`), followed by `codesign --verify --deep --strict`. Use `--identity 'Apple Development: …'` to pick another identity. `--no-sign` only skips signing, and patching invalidates the original signature either way. IPA provisioning remains external. Mac conversion replaces entitlements with the generated sandbox settings described in [macOS conversion](catalyst.md).
+The default signature is ad-hoc (`codesign --force --deep --sign -`), followed by `codesign --verify --deep --strict`. Use `--identity 'Apple Development: …'` to pick another identity. `--no-sign` only skips signing, and patching invalidates the original signature either way. IPA provisioning remains external. Mac conversion replaces entitlements with the generated sandbox and optional Keychain settings described in [macOS conversion](catalyst.md).
 
 > Some apps produce incomplete core dumps because `gcore` cannot read a memory mapping. unipa attempts recovery from the captured data and stops if required bytes are missing.
 
@@ -116,4 +116,4 @@ python3 -B src/macho/cli.py recover --binary /path/to/executable --core /path/to
 python3 -B src/macho/cli.py patch --binary /path/to/executable --region /tmp/new-recovery/region.bin --output /tmp/new-executable
 ```
 
-`UNIPA_PYTHON=/path/to/python3` selects the Python interpreter. The tests use synthetic Mach-O files and cores, so they never launch a real app or use `sudo`. The macOS integration tests rely on `xcrun clang`, `codesign`, `ditto`, and `unzip`.
+`UNIPA_PYTHON=/path/to/python3` selects the Python interpreter. Tests use synthetic Mach-O files, cores, and fixture apps; they do not launch installed third-party apps or use `sudo`. The macOS tests compile and execute fixture processes and rely on `xcrun clang`, `vtool`, `install_name_tool`, `codesign`, `plutil`, `openssl`, `ditto`, and `unzip`. Keychain test commands and coverage are described in [Keychain storage](keychain.md#verification).

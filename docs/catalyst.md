@@ -14,11 +14,15 @@ Hooks in `src/hooks/` are compiled into `UnipaRuntime.dylib` and added to the ex
 
 ## Bundle settings
 
-The Mac app filename uses the source app's display name, falling back to its bundle name; the executable filename stays the same. Without an ID override, conversion adds `.unipalocal` to the bundle ID.
+The Mac app filename uses the source app's display name, falling back to its bundle name; the executable filename stays the same. Without an ID override, conversion adds `.unipalocal` to the bundle ID and an instance suffix for a nondefault isolated Keychain instance.
 
 `--bundle-id` and `--bundle-name` are shared with IPA output. See [bundle settings](bundle.md) for random and exact values, naming, nested IDs, and signing implications.
 
-Entitlements are replaced with a sandbox profile that allows outgoing network connections. Original entitlements are dropped, so push notifications, App Groups, and other provisioned features may need additional configuration.
+Entitlements are replaced with a sandbox profile that allows outgoing network connections. Optional isolated Keychain storage adds access to the selected database. Original entitlements are dropped, so push notifications, App Groups, and other provisioned features may need additional configuration.
+
+## Optional Keychain storage
+
+`--isolated-keychain` uses independent storage for the generated Mac app. `--keychain-instance <name>` selects another persistent instance and enables isolation. Native Keychain remains the default, and the IPA is unaffected. See [isolated Keychain storage](keychain.md) for paths, behavior, security limits, and tests.
 
 ## Compatibility sandbox
 

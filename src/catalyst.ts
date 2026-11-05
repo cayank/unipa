@@ -15,6 +15,13 @@ export type CatalystConversion = {
   name: string;
   bundle_id: string;
   identity: string;
+  keychain: {
+    backend: "sqlite";
+    bundle_id: string;
+    instance: string;
+    directory: string;
+    database: string;
+  } | null;
   binaries: CatalystBinary[];
   signed_targets: string[];
   runtime: {
@@ -50,9 +57,13 @@ export async function createCatalystApp(
   app: string,
   outputDir: string,
   identity: string,
+  keychainInstance?: string,
   bundle: { id?: string; name?: string } = {},
 ): Promise<CatalystConversion> {
   const args = ["--app", app, "--output-dir", outputDir, "--identity", identity];
+  if (keychainInstance !== undefined) {
+    args.push("--keychain-instance", keychainInstance);
+  }
   if (bundle.id !== undefined) args.push(`--bundle-id=${bundle.id}`);
   if (bundle.name !== undefined) args.push(`--bundle-name=${bundle.name}`);
   return runMachO<CatalystConversion>("convert-macos", args);
