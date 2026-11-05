@@ -161,8 +161,7 @@ export async function dumpCore(options: DumpOptions): Promise<number> {
   }
   await execute(["/usr/bin/sudo", "/usr/sbin/chown", `${process.getuid!()}:${process.getgid!()}`, outputPath], { interactive: true });
   await chmod(outputPath, 0o600);
-  if (incomplete) log.info(`Incomplete core saved for recovery: ${outputPath}`);
-  else log.success(`Core dump saved: ${outputPath}`);
+  incomplete ? log.info(`Incomplete core saved for recovery: ${outputPath}`) : log.success(`Core dump saved: ${outputPath}`);
   return targetPid;
 }
 
