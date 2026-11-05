@@ -104,6 +104,14 @@ static NSSet *dataAttributes(void) {
     return keys;
 }
 
+static id defaultPrimaryAttribute(id key) {
+    if ([dataAttributes() containsObject:key]) return NSData.data;
+    if ([key isEqual:(__bridge id)kSecAttrPort] ||
+        [key isEqual:(__bridge id)kSecAttrKeySizeInBits] ||
+        [key isEqual:(__bridge id)kSecAttrEffectiveKeySize]) return @0;
+    return @"";
+}
+
 static OSStatus validate(NSDictionary *dictionary, BOOL query) {
     id itemClass = dictionary[(__bridge id)kSecClass];
     if (itemClass && !primaryAttributes(itemClass)) return errSecUnimplemented;
@@ -156,10 +164,44 @@ static NSData *serialize(id value) {
     return [NSPropertyListSerialization dataWithPropertyList:value format:NSPropertyListBinaryFormat_v1_0 options:0 error:NULL];
 }
 
+static NSData *lookupValue(id value) {
+    NSData *data;
+    uint8_t type;
+    if ([value isKindOfClass:NSString.class]) {
+        data = [[value precomposedStringWithCanonicalMapping] dataUsingEncoding:NSUTF8StringEncoding];
+        type = 1;
+    } else if ([value isKindOfClass:NSData.class]) {
+        data = value;
+        type = 2;
+    } else return nil;
+    if (!data) return nil;
+    NSMutableData *result = [NSMutableData dataWithBytes:&type length:1];
+    [result appendData:data];
+    return result;
+}
+
+static int bindValue(sqlite3_stmt *statement, int position, id value) {
+    if ([value isKindOfClass:NSData.class]) {
+        return sqlite3_bind_blob(statement, position, [value bytes], (int)[value length], SQLITE_TRANSIENT);
+    }
+    if ([value isKindOfClass:NSString.class]) {
+        return sqlite3_bind_text(statement, position, [value UTF8String], -1, SQLITE_TRANSIENT);
+    }
+    return SQLITE_MISUSE;
+}
+
+static int schemaVersion(sqlite3 *database) {
+    sqlite3_stmt *statement;
+    if (sqlite3_prepare_v2(database, "PRAGMA user_version", -1, &statement, NULL) != SQLITE_OK) return -1;
+    int version = sqlite3_step(statement) == SQLITE_ROW ? sqlite3_column_int(statement, 0) : -1;
+    sqlite3_finalize(statement);
+    return version;
+}
+
 static NSData *identity(NSDictionary *attributes) {
     NSMutableArray *parts = [NSMutableArray arrayWithObject:attributes[(__bridge id)kSecClass]];
     for (id key in primaryAttributes(parts[0])) {
-        [parts addObject:attributes[key] ?: ([key isEqual:(__bridge id)kSecAttrPort] ? @0 : @"")];
+        [parts addObject:attributes[key] ?: defaultPrimaryAttribute(key)];
     }
     return serialize(parts);
 }
@@ -231,6 +273,59 @@ static NSDictionary *recordForKey(NSDictionary *attributes, id key) {
     if (_db) sqlite3_close(_db);
 }
 
+- (OSStatus)updateIndex:(NSDictionary *)attributes identifier:(NSData *)identifier {
+    sqlite3_stmt *statement;
+    if (sqlite3_prepare_v2(_db, "DELETE FROM item_attributes WHERE item_id=?", -1, &statement, NULL) != SQLITE_OK) return errSecIO;
+    int result = bindValue(statement, 1, identifier);
+    if (result == SQLITE_OK) result = sqlite3_step(statement);
+    sqlite3_finalize(statement);
+    if (result != SQLITE_DONE) return errSecIO;
+
+    if (sqlite3_prepare_v2(_db, "INSERT INTO item_attributes (item_id,name,value) VALUES (?,?,?)", -1, &statement, NULL) != SQLITE_OK) return errSecIO;
+    OSStatus status = errSecSuccess;
+    for (id name in attributeKeys()) {
+        if ([name isEqual:(__bridge id)kSecValueData]) continue;
+        NSData *value = lookupValue(attributes[name]);
+        if (!value) continue;
+        sqlite3_reset(statement);
+        sqlite3_clear_bindings(statement);
+        if (bindValue(statement, 1, identifier) != SQLITE_OK ||
+            bindValue(statement, 2, name) != SQLITE_OK ||
+            bindValue(statement, 3, value) != SQLITE_OK || sqlite3_step(statement) != SQLITE_DONE) {
+            status = errSecIO;
+            break;
+        }
+    }
+    sqlite3_finalize(statement);
+    return status;
+}
+
+- (OSStatus)prepareSchema {
+    int version = schemaVersion(_db);
+    if (version != 0 && version != 2) return errSecIO;
+    
+    // DELETE journals inherit the database's 0600 mode and disappear after commit
+    if (sqlite3_exec(_db, "PRAGMA foreign_keys=ON; PRAGMA journal_mode=DELETE; PRAGMA secure_delete=ON; BEGIN IMMEDIATE;",
+                     NULL, NULL, NULL) != SQLITE_OK) return errSecIO;
+    version = schemaVersion(_db);
+    OSStatus status = version == 0 || version == 2 ? errSecSuccess : errSecIO;
+    if (!status && sqlite3_exec(_db,
+        "CREATE TABLE IF NOT EXISTS metadata (id INTEGER PRIMARY KEY CHECK(id=1), namespace BLOB NOT NULL);"
+        "INSERT OR IGNORE INTO metadata VALUES (1, randomblob(16));"
+        "CREATE TABLE IF NOT EXISTS items (id BLOB PRIMARY KEY NOT NULL, identity BLOB UNIQUE NOT NULL, attributes BLOB NOT NULL);"
+        "CREATE TABLE IF NOT EXISTS item_attributes (item_id BLOB NOT NULL REFERENCES items(id) ON DELETE CASCADE,"
+        "name TEXT NOT NULL, value BLOB NOT NULL, PRIMARY KEY(item_id,name));"
+        "CREATE INDEX IF NOT EXISTS item_attributes_lookup ON item_attributes(name,value,item_id);",
+        NULL, NULL, NULL) != SQLITE_OK) status = errSecIO;
+
+    if (!status && version == 0 && sqlite3_exec(_db, "PRAGMA user_version=2", NULL, NULL, NULL) != SQLITE_OK) status = errSecIO;
+    if (sqlite3_exec(_db, status ? "ROLLBACK" : "COMMIT", NULL, NULL, NULL) != SQLITE_OK) {
+        sqlite3_exec(_db, "ROLLBACK", NULL, NULL, NULL);
+        return errSecIO;
+    }
+    return status;
+}
+
 - (OSStatus)open {
     if (_db) return errSecSuccess;
     struct stat info;
@@ -244,17 +339,8 @@ static NSDictionary *recordForKey(NSDictionary *attributes, id key) {
     if (!safe) return errSecIO;
     if (sqlite3_open_v2(file.fileSystemRepresentation, &_db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_NOFOLLOW, NULL) != SQLITE_OK) goto failed;
     sqlite3_busy_timeout(_db, 5000);
+    if ([self prepareSchema] != errSecSuccess) goto failed;
     sqlite3_stmt *statement;
-    if (sqlite3_prepare_v2(_db, "PRAGMA user_version", -1, &statement, NULL) != SQLITE_OK) goto failed;
-    int version = sqlite3_step(statement) == SQLITE_ROW ? sqlite3_column_int(statement, 0) : -1;
-    sqlite3_finalize(statement);
-    if (version != 0 && version != 1) goto failed;
-    // DELETE journals inherit the database's 0600 mode and disappear after commit.
-    if (sqlite3_exec(_db, "PRAGMA journal_mode=DELETE; PRAGMA secure_delete=ON; BEGIN IMMEDIATE;"
-                         "CREATE TABLE IF NOT EXISTS metadata (id INTEGER PRIMARY KEY CHECK(id=1), namespace BLOB NOT NULL);"
-                         "INSERT OR IGNORE INTO metadata VALUES (1, randomblob(16));"
-                         "CREATE TABLE IF NOT EXISTS items (id BLOB PRIMARY KEY NOT NULL, identity BLOB UNIQUE NOT NULL, attributes BLOB NOT NULL);"
-                         "PRAGMA user_version=1; COMMIT;", NULL, NULL, NULL) != SQLITE_OK) goto failed;
     if (sqlite3_prepare_v2(_db, "SELECT namespace FROM metadata WHERE id=1", -1, &statement, NULL) != SQLITE_OK) goto failed;
     if (sqlite3_step(statement) == SQLITE_ROW && sqlite3_column_bytes(statement, 0) == 16) {
         _namespace = [NSData dataWithBytes:sqlite3_column_blob(statement, 0) length:16];
@@ -288,11 +374,44 @@ failed:
     return YES;
 }
 
-- (NSArray *)records:(NSDictionary *)query status:(OSStatus *)status {
+- (NSArray *)records:(NSDictionary *)query limit:(NSUInteger)limit status:(OSStatus *)status {
+    NSData *identifier = nil;
+    NSData *reference = query[(__bridge id)kSecValuePersistentRef];
+    if (reference) {
+        NSData *prefix = [self persistentReference:NSData.data];
+        if (reference.length != prefix.length + 16 ||
+            ![[reference subdataWithRange:NSMakeRange(0, prefix.length)] isEqual:prefix]) return @[];
+        identifier = [reference subdataWithRange:NSMakeRange(prefix.length, 16)];
+    }
+
+    NSMutableString *sql = [@"SELECT items.id, items.attributes FROM items" mutableCopy];
+    NSMutableArray *bindings = [NSMutableArray array];
+    NSUInteger index = 0;
+    for (id name in [query.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
+        if (![attributeKeys() containsObject:name] || [name isEqual:(__bridge id)kSecValueData] ||
+            [name isEqual:(__bridge id)kSecAttrSynchronizable]) continue;
+        NSData *value = lookupValue(query[name]);
+        if (!value) continue;
+        NSString *alias = [NSString stringWithFormat:@"lookup%lu", (unsigned long)index++];
+        [sql appendFormat:@" JOIN item_attributes %@ ON %@.item_id=items.id AND %@.name=? AND %@.value=?", alias, alias, alias, alias];
+        [bindings addObjectsFromArray:@[name, value]];
+    }
+    if (identifier) {
+        [sql appendString:@" WHERE items.id=?"];
+        [bindings addObject:identifier];
+    }
+    [sql appendString:@" ORDER BY items.rowid"];
     sqlite3_stmt *statement;
-    if (sqlite3_prepare_v2(_db, "SELECT id, attributes FROM items ORDER BY rowid", -1, &statement, NULL) != SQLITE_OK) {
+    if (sqlite3_prepare_v2(_db, sql.UTF8String, -1, &statement, NULL) != SQLITE_OK) {
         *status = errSecIO;
         return nil;
+    }
+    for (NSUInteger position = 0; position < bindings.count; position++) {
+        if (bindValue(statement, (int)position + 1, bindings[position]) != SQLITE_OK) {
+            sqlite3_finalize(statement);
+            *status = errSecIO;
+            return nil;
+        }
     }
     NSMutableArray *records = [NSMutableArray array];
     int result;
@@ -305,9 +424,12 @@ failed:
             break;
         }
         attributes[itemID] = [NSData dataWithBytes:sqlite3_column_blob(statement, 0) length:16];
-        if ([self matches:attributes query:query]) [records addObject:attributes];
+        if ([self matches:attributes query:query]) {
+            [records addObject:attributes];
+            if (limit && records.count >= limit) break;
+        }
     }
-    if (result != SQLITE_DONE && *status == errSecSuccess) *status = errSecIO;
+    if (result != SQLITE_DONE && result != SQLITE_ROW && *status == errSecSuccess) *status = errSecIO;
     sqlite3_finalize(statement);
     return *status == errSecSuccess ? records : nil;
 }
@@ -332,17 +454,34 @@ failed:
 }
 
 - (OSStatus)write:(NSDictionary *)attributes identifier:(NSData *)identifier adding:(BOOL)adding {
+    OSStatus status = validate(attributes, NO);
+    if (status) return status;
     NSData *data = serialize(attributes), *key = identity(attributes);
     if (!data || !key) return errSecParam;
     const char *sql = adding ? "INSERT INTO items (attributes,identity,id) VALUES (?,?,?)" : "UPDATE items SET attributes=?,identity=? WHERE id=?";
     sqlite3_stmt *statement;
     if (sqlite3_prepare_v2(_db, sql, -1, &statement, NULL) != SQLITE_OK) return errSecIO;
-    sqlite3_bind_blob(statement, 1, data.bytes, (int)data.length, SQLITE_TRANSIENT);
-    sqlite3_bind_blob(statement, 2, key.bytes, (int)key.length, SQLITE_TRANSIENT);
-    sqlite3_bind_blob(statement, 3, identifier.bytes, (int)identifier.length, SQLITE_TRANSIENT);
-    int result = sqlite3_step(statement);
+    if (sqlite3_exec(_db, "SAVEPOINT item_write", NULL, NULL, NULL) != SQLITE_OK) {
+        sqlite3_finalize(statement);
+        return errSecIO;
+    }
+    int result = SQLITE_ERROR;
+    if (bindValue(statement, 1, data) == SQLITE_OK && bindValue(statement, 2, key) == SQLITE_OK &&
+        bindValue(statement, 3, identifier) == SQLITE_OK) result = sqlite3_step(statement);
     sqlite3_finalize(statement);
-    return result == SQLITE_DONE ? errSecSuccess : (result == SQLITE_CONSTRAINT ? errSecDuplicateItem : errSecIO);
+    status = result == SQLITE_DONE ? errSecSuccess : (result == SQLITE_CONSTRAINT ? errSecDuplicateItem : errSecIO);
+    if (!status) status = [self updateIndex:attributes identifier:identifier];
+    if (status && sqlite3_exec(_db, "ROLLBACK TO item_write", NULL, NULL, NULL) != SQLITE_OK) {
+        sqlite3_exec(_db, "ROLLBACK", NULL, NULL, NULL);
+        return errSecIO;
+    }
+    if (sqlite3_exec(_db, "RELEASE item_write", NULL, NULL, NULL) != SQLITE_OK) {
+        if (sqlite3_exec(_db, "ROLLBACK TO item_write; RELEASE item_write", NULL, NULL, NULL) != SQLITE_OK) {
+            sqlite3_exec(_db, "ROLLBACK", NULL, NULL, NULL);
+        }
+        return errSecIO;
+    }
+    return status;
 }
 
 - (OSStatus)add:(CFDictionaryRef)input result:(CFTypeRef *)result {
@@ -388,7 +527,7 @@ failed:
         attributes[(__bridge id)kSecAttrSerialNumber] = CFBridgingRelease(SecCertificateCopySerialNumberData(ref, NULL));
     }
     for (id key in primaryAttributes(itemClass)) {
-        if (!attributes[key]) attributes[key] = [key isEqual:(__bridge id)kSecAttrPort] ? @0 : @"";
+        if (!attributes[key]) attributes[key] = defaultPrimaryAttribute(key);
     }
     attributes[(__bridge id)kSecAttrSynchronizable] = @NO;
     if (!serialize(attributes)) return errSecParam;
@@ -403,7 +542,8 @@ failed:
     @synchronized (self) {
         status = [self open];
         if (status) return status;
-        // Persistent references include the store namespace, which is loaded by open.
+        
+        // Persistent references include the store namespace, which is loaded by open
         value = [self resultFor:record options:options status:&status];
         if (!status) status = [self write:attributes identifier:identifier adding:YES];
     }
@@ -420,10 +560,10 @@ failed:
     @synchronized (self) {
         status = [self open];
         if (status) return status;
-        NSArray *records = [self records:query status:&status];
+        BOOL all = [query[(__bridge id)kSecMatchLimit] isEqual:(__bridge id)kSecMatchLimitAll];
+        NSArray *records = [self records:query limit:(all ? 0 : 1) status:&status];
         if (status) return status;
         if (!records.count) return errSecItemNotFound;
-        BOOL all = [query[(__bridge id)kSecMatchLimit] isEqual:(__bridge id)kSecMatchLimitAll];
         NSMutableArray *values = [NSMutableArray array];
         for (NSDictionary *record in records) {
             id value = [self resultFor:record options:query status:&status];
@@ -456,7 +596,7 @@ failed:
         status = [self open];
         if (status) return status;
         if (sqlite3_exec(_db, "BEGIN IMMEDIATE", NULL, NULL, NULL) != SQLITE_OK) return errSecIO;
-        NSArray *records = [self records:query status:&status];
+        NSArray *records = [self records:query limit:0 status:&status];
         if (!status && !records.count) status = errSecItemNotFound;
         for (NSDictionary *record in records) {
             if (status) break;
@@ -510,7 +650,8 @@ failed:
     NSMutableDictionary *ephemeral = [ephemeralAttributes(parameters) mutableCopy];
     ephemeral[(__bridge id)kSecPrivateKeyAttrs] = ephemeralAttributes(privateAttributes);
     ephemeral[(__bridge id)kSecPublicKeyAttrs] = ephemeralAttributes(publicAttributes);
-    // Calls from this image reach the original API; permanence is handled below.
+    
+    // Calls from this image reach the original API, permanence is handled below
     id privateKey = CFBridgingRelease(SecKeyCreateRandomKey((__bridge CFDictionaryRef)ephemeral, error));
     if (!privateKey) return NULL;
     BOOL savePrivate = flag(privateAttributes, kSecAttrIsPermanent);
