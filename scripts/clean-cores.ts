@@ -87,7 +87,7 @@ async function main(): Promise<void> {
     const runPath = path.join(outputDir, folder.name);
     const corePath = path.join(runPath, "process.core");
     try {
-      if (!folder.name.startsWith("machkit-") && !(await isAppRun(runPath))) continue;
+      if (!folder.name.startsWith("unipa-") && !(await isAppRun(runPath))) continue;
       const info = await lstat(corePath);
       if (!info.isFile()) continue;
 
