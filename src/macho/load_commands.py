@@ -40,6 +40,7 @@ def dylib_names(binary: MachO) -> set[str]:
     for command, offset, size in commands(binary):
         if command not in DYLIB_COMMANDS:
             continue
+        
         if size < 24:
             raise MachOError("Truncated dylib load command")
 

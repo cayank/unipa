@@ -322,6 +322,7 @@ async function main() {
   for (const library of injections) {
     log.success(`Injected ${library.binary}`);
   }
+  
   const ipa = await pack(app, workspace, identity, injections);
   let macos = null;
   if (options.macos) {

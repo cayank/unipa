@@ -1,6 +1,6 @@
 import path from "node:path";
 import { createReadStream } from "node:fs";
-import { chmod, realpath, stat } from "node:fs/promises";
+import { chmod, lstat, realpath, rename, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { log } from "./logger";
 
@@ -9,26 +9,46 @@ type ExecuteOptions = {
   interactive?: boolean;
 };
 
+class CommandError extends Error {
+  constructor(
+    command: string[],
+    readonly exitCode: number,
+    readonly stderr: string,
+    readonly stdout: string,
+  ) {
+    super(`${command[0]} exited with ${exitCode}${stderr.trim() ? `: ${stderr.trim()}` : ""}`);
+    this.name = "CommandError";
+  }
+}
+
+async function readOutput(stream: ReadableStream<Uint8Array>, destination?: NodeJS.WriteStream): Promise<string> {
+  if (!destination) return new Response(stream).text();
+
+  const decoder = new TextDecoder();
+  let output = "";
+  for await (const chunk of stream) {
+    destination.write(chunk);
+    output += decoder.decode(chunk, { stream: true });
+  }
+
+  return output + decoder.decode();
+}
+
 export async function execute(command: string[], { cwd, interactive = false }: ExecuteOptions = {}): Promise<string> {
   const child = Bun.spawn(command, {
     cwd,
     stdin: interactive ? "inherit" : "ignore",
-    stdout: interactive ? "inherit" : "pipe",
-    stderr: interactive ? "inherit" : "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
   });
 
   const [stdout, stderr, exitCode] = await Promise.all([
-    child.stdout instanceof ReadableStream ? new Response(child.stdout).text() : Promise.resolve(""),
-    child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(""),
+    readOutput(child.stdout, interactive ? process.stdout : undefined),
+    readOutput(child.stderr, interactive ? process.stderr : undefined),
     child.exited,
   ]);
 
-  if (exitCode !== 0) {
-    let message = `${command[0]} exited with ${exitCode}`;
-    if (stderr.trim()) message += `: ${stderr.trim()}`;
-    throw new Error(message);
-  }
-
+  if (exitCode !== 0) throw new CommandError(command, exitCode, stderr, stdout);
   return stdout;
 }
 
@@ -123,11 +143,26 @@ export async function dumpCore(options: DumpOptions): Promise<number> {
   await Bun.sleep(waitMs);
   await waitForPid(executable, targetPid);
 
-  log.info("Dumping core (sudo may request your password)…");
-  await execute(["/usr/bin/sudo", "/usr/bin/gcore", "-v", "-o", outputPath, String(targetPid)], { interactive: true });
+  log.info("Dumping core (sudo may request your password; the app pauses during capture)…");
+  let incomplete = false;
+  try {
+    await execute(["/usr/bin/sudo", "/usr/bin/gcore", "-s", "-d", "-v", "-o", outputPath, String(targetPid)], { interactive: true });
+  } catch (error) {
+    if (!(error instanceof CommandError) || error.exitCode !== 74) throw error;
+    if (!error.stdout.includes("mach_vm_remap()") && !error.stderr.includes("mach_vm_remap()")) throw error;
+
+    const partialPath = `${outputPath}.tmp`;
+    const partial = await lstat(partialPath).catch(() => undefined);
+    if (!partial?.isFile() || partial.size === 0) throw error;
+
+    await rename(partialPath, outputPath);
+    incomplete = true;
+    log.warn("gcore could not read a memory mapping. The dump is incomplete; recovery will check that all required bytes are present.");
+  }
   await execute(["/usr/bin/sudo", "/usr/sbin/chown", `${process.getuid!()}:${process.getgid!()}`, outputPath], { interactive: true });
   await chmod(outputPath, 0o600);
-  log.success(`Core dump saved: ${outputPath}`);
+  if (incomplete) log.info(`Incomplete core saved for recovery: ${outputPath}`);
+  else log.success(`Core dump saved: ${outputPath}`);
   return targetPid;
 }
 

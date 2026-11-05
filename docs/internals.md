@@ -74,6 +74,8 @@ unipa is macOS-only (`os: ["darwin"]`) and exits on any other system before doin
 
 The default signature is ad-hoc (`codesign --force --deep --sign -`), followed by `codesign --verify --deep --strict`. Use `--identity 'Apple Development: …'` to pick another identity. `--no-sign` only skips signing, and patching invalidates the original signature either way. Provisioning and entitlements are outside the scope of this tool.
 
+> Some apps produce incomplete core dumps because `gcore` cannot read a memory mapping. unipa attempts recovery from the captured data and stops if required bytes are missing.
+
 Taking a new core may ask for your `sudo` password. Only `gcore` and the `chown` that gives you ownership of the core run under sudo. The work folder is created with `0700`, and the core and reports with `0600`.
 
 ## macOS conversion
