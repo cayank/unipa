@@ -1,5 +1,5 @@
 output/
-/dylibs/
+dylibs/
 tests/
 *.pyc
 .ruff_cache/
