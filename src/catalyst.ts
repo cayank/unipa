@@ -12,6 +12,7 @@ export type CatalystConversion = {
   status: "ready";
   app: string;
   original_bundle_id: string;
+  name: string;
   bundle_id: string;
   identity: string;
   binaries: CatalystBinary[];
@@ -45,6 +46,14 @@ export async function checkCatalystTools(): Promise<void> {
   }
 }
 
-export async function createCatalystApp(app: string, outputDir: string, identity: string): Promise<CatalystConversion> {
-  return runMachO<CatalystConversion>("convert-macos", ["--app", app, "--output-dir", outputDir, "--identity", identity]);
+export async function createCatalystApp(
+  app: string,
+  outputDir: string,
+  identity: string,
+  bundle: { id?: string; name?: string } = {},
+): Promise<CatalystConversion> {
+  const args = ["--app", app, "--output-dir", outputDir, "--identity", identity];
+  if (bundle.id !== undefined) args.push(`--bundle-id=${bundle.id}`);
+  if (bundle.name !== undefined) args.push(`--bundle-name=${bundle.name}`);
+  return runMachO<CatalystConversion>("convert-macos", args);
 }

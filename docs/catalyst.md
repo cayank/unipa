@@ -14,7 +14,11 @@ Hooks in `src/hooks/` are compiled into `UnipaRuntime.dylib` and added to the ex
 
 ## Bundle settings
 
-App and display names stay the same. The bundle identifier gets a `.unipalocal` suffix, which may break apps that depend on it. Entitlements are replaced with a sandbox profile that allows outgoing network connections. The original entitlements are dropped, so keychain groups, push notifications, App Groups, and similar features may need extra provisioning or changes to the app.
+The Mac app filename uses the source app's display name, falling back to its bundle name; the executable filename stays the same. Without an ID override, conversion adds `.unipalocal` to the bundle ID.
+
+`--bundle-id` and `--bundle-name` are shared with IPA output. See [bundle settings](bundle.md) for random and exact values, naming, nested IDs, and signing implications.
+
+Entitlements are replaced with a sandbox profile that allows outgoing network connections. Original entitlements are dropped, so push notifications, App Groups, and other provisioned features may need additional configuration.
 
 ## Compatibility sandbox
 

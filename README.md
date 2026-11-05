@@ -54,6 +54,16 @@ To retry patching and packaging from a core you already have, no app launch need
 unipa --app /Applications/Example.app --core /tmp/example.core
 ```
 
+### Bundle settings
+
+Change the output bundle ID or optionally its name:
+
+```bash
+unipa --app /Applications/Example.app --bundle-id random --bundle-name "Application Test"
+```
+
+Pass an exact ID instead of `random` to use your own value. These settings apply to the IPA and, with `--macos`, the Mac copy. See [bundle settings](docs/bundle.md) for defaults and signing implications.
+
 ### Mac app (experimental)
 
 `--macos` also produces a Mac Catalyst app that runs directly on your Mac:

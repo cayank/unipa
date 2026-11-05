@@ -5,3 +5,4 @@ export * from "./pack";
 export * from "./inject";
 export * from "./cleanup";
 export * from "./catalyst";
+export * from "./bundle";

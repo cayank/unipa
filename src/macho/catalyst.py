@@ -13,6 +13,7 @@ from pathlib import Path
 from entitlements import compatibility_sandbox, macos_entitlements
 from reader import MachO, MachOError
 from load_commands import add_dylibs, build_platform, dylib_names
+from bundle import app_filename, bundle_settings, converted_bundle_id
 
 ARM64 = 0x100000C
 MACOS = 1
@@ -103,7 +104,8 @@ def add_runtime_hooks(executable: Path, app: Path) -> Binary:
     executable.write_bytes(add_dylibs(executable.read_bytes(), [RUNTIME_LIBRARY]))
     return inspect_binary(library, app)
 
-def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
+def convert_bundle(inspection: dict, output_dir: Path, identity: str,
+                   bundle_id_override: str | None = None, bundle_name: str | None = None) -> dict:
     source = Path(inspection["path"])
     output_dir = output_dir.resolve()
     if output_dir.is_relative_to(source):
@@ -119,6 +121,10 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
     if not isinstance(bundle_id, str) or not bundle_id:
         raise MachOError("macOS conversion requires a CFBundleIdentifier")
 
+    default_id = converted_bundle_id(bundle_id, None)
+    settings = bundle_settings(
+        bundle_id, inspection["name"], default_id if bundle_id_override is None else bundle_id_override, bundle_name
+    )
     binaries = [inspect_binary(Path(item), source) for item in inspection["binaries"]]
     main_relative = Path(inspection["executable"]).relative_to(source)
     main = next(binary for binary in binaries if binary.relative == main_relative)
@@ -129,15 +135,17 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
     install_name_tool = run_tool("/usr/bin/xcrun", "--find", "install_name_tool")
 
     output_dir.mkdir(parents=True, mode=0o700)
-    output = output_dir / source.name
-    pending = output_dir / f".{source.stem}.pending.app"
+    output_name = app_filename(settings["name"], source.name)
+    output = output_dir / output_name
+    pending = output_dir / f".{Path(output_name).stem}.pending.app"
     report_path = output_dir / "conversion.json"
     report = {
         "status": "converting",
         "source": str(source),
         "app": str(output),
         "original_bundle_id": bundle_id,
-        "bundle_id": f"{bundle_id}.unipalocal",
+        "bundle_id": settings["bundle_id"],
+        "name": settings["name"],
         "identity": identity,
         "binaries": [],
         "signed_targets": [],
@@ -164,25 +172,11 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
         for binary in binaries:
             path = pending / binary.relative
             if binary.platform == IOS:
-                run_tool(
-                    vtool,
-                    "-set-build-version",
-                    "maccatalyst",
-                    "11.0",
-                    "14.0",
-                    "-replace",
-                    "-output",
-                    str(path),
-                    str(path),
-                )
+                run_tool(vtool, "-set-build-version", "maccatalyst", "11.0", "14.0", "-replace", "-output", str(path), str(path))
+
             if binary.fix_swift_uikit:
-                run_tool(
-                    install_name_tool,
-                    "-change",
-                    SWIFT_UIKIT,
-                    CATALYST_SWIFT_UIKIT,
-                    str(path),
-                )
+                run_tool(install_name_tool, "-change", SWIFT_UIKIT, CATALYST_SWIFT_UIKIT, str(path))
+
             descriptor, temporary = tempfile.mkstemp(dir=path.parent)
             os.close(descriptor)
             try:
@@ -195,15 +189,15 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
             expected = MAC_CATALYST if binary.platform == IOS else binary.platform
             if converted.platform != expected or converted.fix_swift_uikit:
                 raise MachOError(f"macOS conversion verification failed: {path}")
-            report["binaries"].append(
-                {
-                    "binary": str(binary.relative),
-                    "original_platform": binary.platform,
-                    "platform": converted.platform,
-                    "swift_uikit_fixed": binary.fix_swift_uikit,
-                }
-            )
 
+            report_binary = {
+                "binary": str(binary.relative),
+                "original_platform": binary.platform,
+                "platform": converted.platform,
+                "swift_uikit_fixed": binary.fix_swift_uikit,
+            }
+            report["binaries"].append(report_binary)
+            
         info_path = pending / "Info.plist"
         info = plistlib.loads(info_path.read_bytes())
         info.setdefault("CFBundleName", inspection["name"])
@@ -217,6 +211,13 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str) -> dict:
                 "UISupportedInterfaceOrientations": ["UIInterfaceOrientationPortrait"],
             }
         )
+        if bundle_name is not None:
+            info["CFBundleName"] = settings["name"]
+            info["CFBundleDisplayName"] = settings["name"]
+            for localized in pending.glob("*.lproj/InfoPlist.strings"):
+                run_tool("/usr/bin/plutil", "-convert", "binary1", str(localized))
+                for key in ("CFBundleName", "CFBundleDisplayName"):
+                    run_tool("/usr/bin/plutil", "-replace", key, "-string", settings["name"], str(localized))
         info.pop("UISupportedInterfaceOrientations~ipad", None)
         info.pop("UISupportedInterfaceOrientations~iphone", None)
         info_path.write_bytes(plistlib.dumps(info, fmt=plistlib.FMT_BINARY))

@@ -13,10 +13,12 @@ import {
   cleanupRun,
   checkCatalystTools,
   createCatalystApp,
+  configureBundle,
   prepareInjection,
   injectLibraries,
 } from "./src";
 import type { InjectionPlan } from "./src/inject";
+import type { BundleConfiguration } from "./src/bundle";
 import { runMachO, type BundleInspection, type Recovery } from "./src/macho/run";
 
 const HELP_MESSAGE = `unipa: dump a running iOS app, recover its decrypted binaries, build an IPA
@@ -38,6 +40,8 @@ Options:
   --exclude-extension <name>  Remove one extension, e.g. Name.appex (repeatable)
   --inject <file>             Embed a local iOS dylib (repeatable; .gz and .xz supported)
   --identity <name>           codesign identity (default: ad-hoc)
+  --bundle-id [id]            Set the output bundle ID (random generates a suffix)
+  --bundle-name [name]        Set the output app name (random generates a suffix)
   --macos                     Also build a standalone Mac Catalyst .app (experimental)
   --no-sign                   Skip signing (patching invalidates the original signature)
   --version                   Show version
@@ -55,8 +59,15 @@ function readNonNegativeInteger(value: string | undefined, fallback: number, nam
 }
 
 function parseOptions() {
+  const argv = Bun.argv.slice(2);
+  const args = argv.map((argument, index) => {
+    const optionalValue = argument === "--bundle-id" || argument === "--bundle-name";
+    const next = argv[index + 1];
+    return optionalValue && (next === undefined || next.startsWith("-")) ? `${argument}=` : argument;
+  });
+
   const { values } = parseArgs({
-    args: Bun.argv.slice(2),
+    args,
     strict: true,
     options: {
       app: { type: "string" },
@@ -72,6 +83,8 @@ function parseOptions() {
       "exclude-extension": { type: "string", multiple: true },
       "no-sign": { type: "boolean" },
       macos: { type: "boolean" },
+      "bundle-id": { type: "string" },
+      "bundle-name": { type: "string" },
       version: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
@@ -97,7 +110,19 @@ function parseOptions() {
   if (values.macos && values["no-sign"]) throw new Error("--macos requires signing; remove --no-sign");
   if (values.macos && values["keep-extensions"]) throw new Error("--macos does not support retained iOS extensions; remove --keep-extensions");
 
+  const bundleId = values["bundle-id"];
+  if (bundleId && (bundleId.length > 255 || !/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*$/.test(bundleId))) {
+    throw new Error("--bundle-id must contain letters, digits, hyphens, and nonempty dot-separated components (maximum 255 characters)");
+  }
+  
+  const bundleName = values["bundle-name"];
+  if (bundleName && (!bundleName.trim() || bundleName.startsWith(".") || /[/\\:\x00-\x1f\x7f]/.test(bundleName) || Buffer.byteLength(bundleName) > 251)) {
+    throw new Error("--bundle-name must be an app name without path separators or control characters (maximum 251 UTF-8 bytes)");
+  }
+
   return {
+    bundleId: values["bundle-id"],
+    bundleName: values["bundle-name"],
     appPath: values.app,
     corePath: values.core,
     pid,
@@ -248,7 +273,7 @@ async function main() {
     injection = await prepareInjection(source.path, options.injectedLibraries, workspace);
   }
 
-  const app = path.join(workspace, "Payload", path.basename(source.path));
+  let app = path.join(workspace, "Payload", path.basename(source.path));
   await mkdir(path.dirname(app), { mode: 0o700 });
   await execute(["/usr/bin/ditto", source.path, app]);
 
@@ -317,17 +342,26 @@ async function main() {
     log.info("No encrypted Mach-O files found; no dump needed.");
   }
 
+  let bundle: BundleConfiguration | null = null;
+  if (options.bundleId !== undefined || options.bundleName !== undefined) {
+    bundle = await configureBundle(app, { id: options.bundleId, name: options.bundleName });
+    app = bundle.app;
+    log.info(`Output app: ${bundle.name} (${bundle.bundle_id})`);
+  }
+
   const identity = options.identity;
   const injections = injection ? await injectLibraries(app, injection) : [];
   for (const library of injections) {
     log.success(`Injected ${library.binary}`);
   }
-  
   const ipa = await pack(app, workspace, identity, injections);
   let macos = null;
   if (options.macos) {
     log.info("Converting a separate copy to Mac Catalyst…");
-    macos = await createCatalystApp(app, path.join(workspace, "macos"), identity!);
+    macos = await createCatalystApp(app, path.join(workspace, "macos"), identity!, {
+      id: options.bundleId !== undefined ? bundle!.bundle_id : undefined,
+    });
+    log.info(`Mac app: ${macos.name} (${macos.bundle_id})`);
     log.success(`Prepared and signed ${macos.binaries.length} binaries`);
   }
 
@@ -346,6 +380,7 @@ async function main() {
     recoveries,
     excluded_extensions: excluded,
     injections,
+    bundle,
     identity: identity ?? null,
     ipa,
     macos,

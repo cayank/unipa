@@ -46,6 +46,10 @@ The patch changes only the `cryptoff..cryptoff+cryptsize` range and the `cryptid
 
 Recovery supports thin, little-endian 64-bit Mach-O only. FAT/universal source apps and 32-bit files fail with an explicit error. Injection libraries can be universal; one compatible CPU type and subtype is selected before embedding. The encrypted range must sit inside a single executable segment, though in the core it may span several adjacent ones.
 
+## Bundle metadata
+
+After recovery, `src/bundle.ts` calls the Python `configure-bundle` command in `src/macho/bundle.py` when a bundle ID or name override was requested. The staged app is updated before injection and signing; its executable filename and code remain unchanged. Related nested app/extension IDs receive the new prefix. Random values are generated once and recorded under `bundle` in the manifest, then reused for Mac output. See [bundle settings](bundle.md).
+
 ## Dylib injection
 
 `--inject` validates and stages local libraries before dumping, then adds them to the output copy after recovery and before signing. This keeps the original executable header available for matching against the core. `src/inject.ts` calls the Python `prepare-injection` and `inject` commands; `src/macho/load_commands.py` provides build-platform parsing, dylib-path validation, and header-padding checks shared by injection and Mac Catalyst conversion. Libraries are signed and verified individually before the app is signed. Plans, results, and hashes are saved under `injection/` and listed in the manifest. See [dylib injection](injection.md) for usage and limits.
@@ -62,7 +66,7 @@ recovery/000/analysis.json       All base candidates and comparison results
 recovery/000/region.bin          Extracted bytes (full cryptsize range)
 recovery/000/executable.patched  Patch result before signing
 recovery/000/result.json         Selected candidate and hashes
-manifest.json                    Verified outputs and cleanup status
+manifest.json                    Verified outputs, bundle overrides, and cleanup status
 App-patched.ipa                  Verified ZIP containing only Payload
 ```
 
@@ -72,7 +76,7 @@ unipa is macOS-only (`os: ["darwin"]`) and exits on any other system before doin
 
 ## Signing and permissions
 
-The default signature is ad-hoc (`codesign --force --deep --sign -`), followed by `codesign --verify --deep --strict`. Use `--identity 'Apple Development: …'` to pick another identity. `--no-sign` only skips signing, and patching invalidates the original signature either way. Provisioning and entitlements are outside the scope of this tool.
+The default signature is ad-hoc (`codesign --force --deep --sign -`), followed by `codesign --verify --deep --strict`. Use `--identity 'Apple Development: …'` to pick another identity. `--no-sign` only skips signing, and patching invalidates the original signature either way. IPA provisioning remains external. Mac conversion replaces entitlements with the generated sandbox settings described in [macOS conversion](catalyst.md).
 
 > Some apps produce incomplete core dumps because `gcore` cannot read a memory mapping. unipa attempts recovery from the captured data and stops if required bytes are missing.
 

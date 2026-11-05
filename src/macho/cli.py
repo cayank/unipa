@@ -8,6 +8,7 @@ import plistlib
 import stat
 import sys
 from pathlib import Path
+from bundle import configure_bundle
 from catalyst import convert_bundle
 from inject import apply_injection, prepare_injection
 from reader import (
@@ -159,10 +160,17 @@ def parse_args() -> argparse.Namespace:
         if command == "inspect-bundle":
             bundle.add_argument("--exclude-extension", action="append", default=[])
 
+    settings = commands.add_parser("configure-bundle")
+    settings.add_argument("--app", type=Path, required=True)
+    settings.add_argument("--bundle-id", nargs="?", const="")
+    settings.add_argument("--bundle-name", nargs="?", const="")
+
     macos = commands.add_parser("convert-macos")
     macos.add_argument("--app", type=Path, required=True)
     macos.add_argument("--output-dir", type=Path, required=True)
     macos.add_argument("--identity", default="-")
+    macos.add_argument("--bundle-id", nargs="?", const="")
+    macos.add_argument("--bundle-name", nargs="?", const="")
 
     prepare = commands.add_parser("prepare-injection")
     prepare.add_argument("--app", type=Path, required=True)
@@ -199,8 +207,11 @@ def run_command(args: argparse.Namespace) -> dict:
     if args.command == "inspect-bundle":
         return inspect_bundle(args.app, args.exclude_extension)
 
+    if args.command == "configure-bundle":
+        return configure_bundle(args.app, args.bundle_id, args.bundle_name)
+
     if args.command == "convert-macos":
-        return convert_bundle(inspect_bundle(args.app), args.output_dir, args.identity)
+        return convert_bundle(inspect_bundle(args.app), args.output_dir, args.identity, args.bundle_id, args.bundle_name)
 
     if args.command == "prepare-injection":
         return prepare_injection(bundle_info(args.app), args.dylib, args.output_dir)
