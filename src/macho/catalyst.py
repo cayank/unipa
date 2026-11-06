@@ -138,7 +138,7 @@ def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = Fal
     return inspect_binary(library, app)
 
 def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_instance: str | None = None,
-                   bundle_id_override: str | None = None, bundle_name: str | None = None) -> dict:
+                   bundle_id_override: str | None = None, bundle_name: str | None = None, *, incoming_network: bool = False) -> dict:
     source = Path(inspection["path"])
     output_dir = output_dir.resolve()
     if output_dir.is_relative_to(source):
@@ -192,6 +192,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
         "name": settings["name"],
         "keychain": keychain,
         "identity": identity,
+        "incoming_network": incoming_network,
         "binaries": [],
         "signed_targets": [],
         "runtime": {
@@ -269,7 +270,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
         if keychain:
             prepare_keychain_directory(keychain)
         entitlements.write_bytes(plistlib.dumps(macos_entitlements(
-            Path(keychain["database"]) if keychain else None, location=location_access
+            Path(keychain["database"]) if keychain else None, location=location_access, incoming_network=incoming_network
         )))
         entitlements.chmod(0o600)
         report["compatibility_sandbox"] = compatibility_sandbox()

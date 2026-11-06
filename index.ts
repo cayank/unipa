@@ -375,9 +375,14 @@ async function main() {
   let macos = null;
   if (options.macos) {
     log.info("Converting a separate copy to Mac Catalyst…");
-    macos = await createCatalystApp(app, path.join(workspace, "macos"), identity!, options.keychainInstance, {
-      id: options.bundleId !== undefined ? bundle!.bundle_id : undefined,
-    });
+    macos = await createCatalystApp(
+      app,
+      path.join(workspace, "macos"),
+      identity!,
+      options.keychainInstance,
+      { id: options.bundleId !== undefined ? bundle!.bundle_id : undefined },
+      injections.length > 0,
+    );
     log.info(`Mac app: ${macos.name} (${macos.bundle_id})`);
     log.success(`Prepared and signed ${macos.binaries.length} binaries`);
   }

@@ -18,7 +18,7 @@ The Mac app filename uses the source app's display name, falling back to its bun
 
 `--bundle-id` and `--bundle-name` are shared with IPA output. See [bundle settings](bundle.md) for random and exact values, naming, nested IDs, and signing implications.
 
-Entitlements are replaced with a sandbox profile that allows outgoing network connections and declared location access. Optional isolated Keychain storage adds access to the selected database. Original entitlements are dropped, so push notifications, App Groups, and other provisioned features may need additional configuration.
+Entitlements are replaced with a sandbox profile that allows outgoing network connections and declared location access. With `--inject`, the Mac app also receives incoming-network permission. Optional isolated Keychain storage adds access to the selected database. Original entitlements are dropped, so push notifications, App Groups, and other provisioned features may need additional configuration.
 
 ## Optional Keychain storage
 

@@ -29,6 +29,8 @@ unipa --app /Applications/Example.app --inject ./dylibs/unipa-flex.dylib --macos
 
 The IPA keeps the injected iOS library. The separate Mac copy retags it along with the other iOS binaries as part of [Mac Catalyst conversion](catalyst.md). Conversion requires thin arm64 binaries after architecture selection. Retagging does not make every iOS library or dependency compatible with macOS; verify its runtime and signing requirements.
 
+With `--macos --inject`, the Mac app also receives incoming-network permission so injected libraries can listen for connections. The library configuration determines the listening address and port. The setting is recorded as `incoming_network` in the conversion report and manifest.
+
 ## Building FLEX
 
 Build the customized FLEX library with Xcode and its iOS SDK installed:

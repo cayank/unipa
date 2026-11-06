@@ -16,6 +16,7 @@ export type CatalystConversion = {
   name: string;
   bundle_id: string;
   identity: string;
+  incoming_network: boolean;
   keychain: {
     backend: "sqlite";
     bundle_id: string;
@@ -66,8 +67,10 @@ export async function createCatalystApp(
   identity: string,
   keychainInstance?: string,
   bundle: { id?: string; name?: string } = {},
+  incomingNetwork = false,
 ): Promise<CatalystConversion> {
   const args = ["--app", app, "--output-dir", outputDir, "--identity", identity];
+  if (incomingNetwork) args.push("--incoming-network");
   if (keychainInstance !== undefined) {
     args.push("--keychain-instance", keychainInstance);
   }
