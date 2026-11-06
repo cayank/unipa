@@ -24,7 +24,7 @@ export async function pack(app: string, workspace: string, identity: string | un
 
   // ditto includes payload itself and retains symlinks and executable modes
   const pending = path.join(workspace, "archive.pending.zip");
-  const output = path.join(workspace, outputFilename(path.basename(app, ".app"), "-patched.ipa"));
+  const output = path.join(workspace, outputFilename(inspection.name, "-patched.ipa"));
   log.info("Creating IPA…");
   await execute(["/usr/bin/ditto", "-c", "-k", "--norsrc", "--keepParent", path.join(workspace, "Payload"), pending]);
 

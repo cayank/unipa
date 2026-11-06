@@ -52,10 +52,13 @@ def bundle_info(app: Path) -> dict:
     if not executable.is_relative_to(app) or not executable.is_file():
         raise MachOError("Executable must be a file inside the selected app")
 
+    names = (info.get("CFBundleDisplayName"), info.get("CFBundleName"), app.stem)
+    name = next(value for value in names if isinstance(value, str) and value.strip())
+
     return {
         "path": str(app),
         "executable": str(executable),
-        "name": info.get("CFBundleDisplayName", info.get("CFBundleName", app.stem)),
+        "name": name,
         "bundle_id": info.get("CFBundleIdentifier", ""),
     }
 

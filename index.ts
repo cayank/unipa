@@ -22,6 +22,7 @@ import {
   type InjectionPlan,
   type BundleConfiguration,
   type BundleInspection,
+  type Bundle,
   type Recovery,
 } from "./src";
 
@@ -207,10 +208,10 @@ async function getCoreOverrides(appPath: string, encrypted: string[], excluded: 
   return extraCores;
 }
 
-async function createWorkspace(selected: string, sourcePath: string, workDir: string): Promise<string> {
+async function createWorkspace(selected: string, source: Bundle, workDir: string): Promise<string> {
   let outputRoot = path.resolve(workDir);
   const selectedRoot = await realpath(selected);
-  const insideSource = (candidate: string) => [sourcePath, selectedRoot].some((root) => candidate === root || candidate.startsWith(root + path.sep));
+  const insideSource = (candidate: string) => [source.path, selectedRoot].some((root) => candidate === root || candidate.startsWith(root + path.sep));
   if (insideSource(outputRoot)) {
     throw new Error("Working directory cannot be inside the source .app");
   }
@@ -233,8 +234,7 @@ async function createWorkspace(selected: string, sourcePath: string, workDir: st
   outputRoot = path.join(ancestor, ...missing);
   if (insideSource(outputRoot)) throw new Error("Working directory resolves inside the source .app");
   await mkdir(outputRoot, { recursive: true, mode: 0o700 });
-  const appName = path.basename(sourcePath, ".app");
-  const workspace = await mkdtemp(path.join(outputRoot, runDirectoryPrefix(appName)));
+  const workspace = await mkdtemp(path.join(outputRoot, runDirectoryPrefix(source.name)));
   await chmod(workspace, 0o700);
   return workspace;
 }
@@ -278,7 +278,7 @@ async function main() {
   const sourceInspection = await runMachO<BundleInspection>("inspect-bundle", inspectionArgs);
   const encrypted = sourceInspection.encrypted;
   const extraCores = await getCoreOverrides(source.path, encrypted, excluded, options.coreOverrides);
-  const workspace = await createWorkspace(selected, source.path, options.workDir);
+  const workspace = await createWorkspace(selected, source, options.workDir);
 
   log.info(`Working directory: ${workspace}`);
   log.info(`App: ${source.name} (${source.bundle_id})`);

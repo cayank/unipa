@@ -74,7 +74,7 @@ unipa --app /Applications/Example.app --macos
 
 ```text
 output/example-XXXXXX/
-├── Example-patched.ipa
+├── example-patched.ipa
 └── macos/
     └── Example.app
 ```
@@ -111,7 +111,7 @@ To keep most extensions but drop one, add `--exclude-extension NotificationServi
 
 ## Output and signing
 
-Each run creates a folder like `output/<app-name>-XXXXXX/` with the IPA, a patched copy of the app, and recovery reports. The prefix is the lowercase `.app` bundle name, shortened if needed to leave room for the random suffix. The default parent is this checkout's `output/` directory; use `--work-dir` to change it. If a run fails, the folder is kept so you can look at it.
+Each run creates a folder like `output/<app-name>-XXXXXX/` with the IPA, a patched copy of the app, and recovery reports. Run folder and IPA filenames use the app's display name in lowercase with accents removed and words separated by hyphens, so `Example App` becomes `example-app`. Long names are shortened to fit filesystem limits. The default parent is this checkout's `output/` directory; use `--work-dir` to change it. If a run fails, the folder is kept so you can look at it.
 
 Signing is ad-hoc by default. `--identity 'Apple Development: …'` picks a different identity, and `--no-sign` skips signing (patching breaks the original signature either way). Source app binaries must be thin, little-endian 64-bit Mach-O files. Universal injection libraries are supported by selecting a compatible architecture; FAT source apps and 32-bit binaries are rejected.
 

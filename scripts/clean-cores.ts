@@ -29,10 +29,9 @@ async function isAppRun(folder: string): Promise<boolean> {
     throw error;
   }
 
-  if (typeof source?.path !== "string") return false;
-  const appName = path.basename(source.path, ".app");
-  const prefixes = [runDirectoryPrefix(appName), `${appName.toLowerCase()}-`, `${appName}-`];
-  return prefixes.some((prefix) => name.startsWith(prefix) && /^[A-Za-z0-9]{6}$/.test(name.slice(prefix.length)));
+  if (typeof source?.path !== "string" || typeof source.name !== "string" || !source.name.trim()) return false;
+  const prefix = runDirectoryPrefix(source.name);
+  return name.startsWith(prefix) && /^[A-Za-z0-9]{6}$/.test(name.slice(prefix.length));
 }
 
 function formatSize(bytes: number): string {

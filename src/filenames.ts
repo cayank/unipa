@@ -1,23 +1,22 @@
 const maxFilenameBytes = 255;
 const runSuffixLength = 6;
 
-function truncateUtf8(value: string, maxBytes: number): string {
-  let result = "";
-  let bytes = 0;
-  for (const character of value) {
-    const length = Buffer.byteLength(character.normalize("NFD"));
-    if (bytes + length > maxBytes) break;
-    result += character;
-    bytes += length;
-  }
-  return result;
+function filenameStem(name: string, maxLength: number): string {
+  const stem = name
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/ı/g, "i")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return stem.slice(0, maxLength).replace(/-+$/, "") || "app";
 }
 
 export function outputFilename(name: string, suffix: string): string {
-  return truncateUtf8(name, maxFilenameBytes - Buffer.byteLength(suffix)) + suffix;
+  return filenameStem(name, maxFilenameBytes - Buffer.byteLength(suffix)) + suffix;
 }
 
 export function runDirectoryPrefix(appName: string): string {
-  const name = truncateUtf8(appName.toLowerCase(), maxFilenameBytes - runSuffixLength - 1);
-  return `${name}-`;
+  return `${filenameStem(appName, maxFilenameBytes - runSuffixLength - 1)}-`;
 }

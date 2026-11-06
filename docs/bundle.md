@@ -38,7 +38,7 @@ Use `--bundle-name random` to generate a name such as `Example_a1b2c3d4`. When b
 unipa --app /Applications/Example.app --bundle-id random --bundle-name random --macos
 ```
 
-The name changes the staged `.app` directory, IPA filename, bundle/display names, and localized display names. The executable filename stays the same. Without a name override, the IPA retains the inner bundle's directory name; the Mac app filename uses its display name, falling back to its bundle name. Unsafe filename characters are replaced, and long filenames are shortened to fit filesystem limits. Display names are preserved.
+The name changes the staged `.app` directory, IPA filename, bundle/display names, and localized display names. The executable filename stays the same. Without a name override, the staged app keeps its inner bundle directory name. Output filenames use the display name, falling back to the bundle name and then the directory name. Run folder and IPA filenames use lowercase, hyphen-separated names with accents removed, such as `example-app-patched.ipa`. The `.app` filenames preserve the chosen name with unsafe filename characters replaced. Long filenames are shortened to fit filesystem limits. Display names are preserved.
 
 Bare `--bundle-id` and `--bundle-name` also request random values. The resolved settings are recorded under `bundle` in `manifest.json`; pass the exact values to reuse them on a later run.
 

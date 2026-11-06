@@ -56,7 +56,7 @@ After recovery, `src/bundle.ts` calls the Python `configure-bundle` command in `
 
 ## Output files
 
-Each run creates a new folder under `output/<app-name>-XXXXXX/`, using the lowercase `.app` bundle name followed by a random suffix. Long names are shortened to keep the complete folder name within filesystem limits. The default parent is the checkout's `output/` directory. Use `--work-dir` to change it.
+Each run creates a new folder under `output/<app-name>-XXXXXX/`, using the source app's display name normalized to lowercase ASCII with hyphens, followed by a random suffix. For example, `Example App` becomes `example-app-XXXXXX/`, with `example-app-patched.ipa` inside. Names without usable letters or digits fall back to `app`. Long names are shortened to keep the complete filename within filesystem limits. The default parent is the checkout's `output/` directory. Use `--work-dir` to change it.
 
 ```text
 Payload/App.app/                 Patched copy, signed unless disabled
@@ -67,7 +67,7 @@ recovery/000/region.bin          Extracted bytes (full cryptsize range)
 recovery/000/executable.patched  Patch result before signing
 recovery/000/result.json         Selected candidate and hashes
 manifest.json                    Verified outputs, bundle overrides, and cleanup status
-App-patched.ipa                  Verified ZIP containing only Payload
+app-patched.ipa                  Verified ZIP containing only Payload
 ```
 
 Failed runs keep their work folder. If the base is ambiguous or missing, `analysis.json` is there to explain why. Recovery artifacts never overwrite existing files, so use a new recovery folder to retry.
@@ -94,7 +94,7 @@ Cores passed with `--core` or `--core-for` are never deleted. `--core` prevents 
 
 The manifest is written atomically with `cleanup.status` set to `pending`, then replaced with cleanup results and a status of `complete` or `failed`. If cleanup fails, the verified IPA is kept, a warning is shown, and the exit code is nonzero. If saving the final results fails, the initial manifest remains with `pending` status; the app may already be closed and the core deleted.
 
-The [cleanup script](../scripts/clean-cores.ts) removes only regular `process.core` files directly inside recognized run folders under the chosen output directory. For app-named folders, the prefix must match the source app in a regular `source.json` file, with the same shortening for long names. The suffix must contain six letters or digits. It leaves IPAs, app copies, extracted regions, and reports alone, skips symlinks, and reports unreadable runs without stopping on them. The commands are in the [README](../README.md#cleanup).
+The [cleanup script](../scripts/clean-cores.ts) removes only regular `process.core` files directly inside recognized run folders under the chosen output directory. The prefix must match the source display name in a regular `source.json` file, using the same filename normalization and shortening. The suffix must contain six letters or digits. It leaves IPAs, app copies, extracted regions, and reports alone, skips symlinks, and reports unreadable runs without stopping on them. The commands are in the [README](../README.md#cleanup).
 
 ## Development
 
