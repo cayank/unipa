@@ -1,6 +1,6 @@
 {
   "name": "unipa",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Takes a core dump of an iOS app running on macOS, locates the encrypted Mach-O regions, extracts them from memory, patches copies of the executables, and produces an IPA containing `Payload/*.app`.",
   "private": true,
   "type": "module",
