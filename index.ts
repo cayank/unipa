@@ -385,7 +385,9 @@ async function main() {
       injections.length > 0,
     );
     log.info(`Mac app: ${macos.name} (${macos.bundle_id})`);
-    log.success(`Prepared and signed ${macos.binaries.length} binaries`);
+    const count = macos.binaries.length;
+    const label = count === 1 ? "binary" : "binaries";
+    log.success(`Prepared and signed ${count} ${label}`);
   }
 
   const manifestPath = path.join(workspace, "manifest.json");

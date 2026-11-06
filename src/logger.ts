@@ -22,7 +22,9 @@ function write(level: Level, message: string, stream = level === "warn" || level
 
 export const log = {
   output(command: string, message: string, stream: "stdout" | "stderr"): void {
-    write("info", `[${command}] ${message}`, process[stream]);
+    const prefix = `${command}:`;
+    const text = message.startsWith(prefix) ? message.slice(prefix.length).trimStart() : message;
+    write("info", `[${command}] ${text}`, process[stream]);
   },
   info(message: string): void {
     write("info", message);

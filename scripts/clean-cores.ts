@@ -118,7 +118,7 @@ async function main(): Promise<void> {
   }
 
   if (errorCount > 0) {
-    const label = errorCount === 1 ? "run" : "runs";
+    const label = `run${errorCount === 1 ? "" : "s"}`;
     log.warn(`Could not clean ${errorCount} ${label}; check the errors above.`);
     process.exitCode = 1;
   }
