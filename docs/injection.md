@@ -15,7 +15,7 @@ The `dylibs/` directory at the project root is ignored by Git. Use it for downlo
 
 Inputs can be `.dylib`, `.dylib.gz`, or `.dylib.xz`. Compressed files are unpacked, and universal libraries are reduced to one compatible CPU type and subtype. An exact subtype match is preferred; a compatible generic slice is accepted when needed. Libraries must target iOS devices and must already be decrypted. Simulator, macOS, incompatible, and ambiguous inputs are rejected.
 
-Libraries are checked and staged before a new core dump is taken. The executable must have enough unused Mach-O header space for the load commands; unipa stops if it cannot add them without moving existing contents. Existing bundle files and duplicate destination names are never overwritten.
+Libraries are checked and staged before a new core dump is taken. The executable must have enough unused Mach-O header space for the load commands; unipa stops if it cannot add them without moving existing contents. Existing bundle files and duplicate destination names are never overwritten. With `--macos`, preflight also reserves `UnipaRuntime.dylib` and checks space for both injected libraries and the Mac runtime before dumping.
 
 Only the main executable receives load commands. Extensions are not injected. Dependencies required by a custom dylib must also be available in the app or provided by the target platform.
 

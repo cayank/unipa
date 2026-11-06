@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from entitlements import compatibility_sandbox, configure_location_access, macos_entitlements
 from reader import MachO, MachOError
-from load_commands import add_dylibs, build_platform, dylib_names
+from load_commands import add_dylibs, build_platform, commands, dylib_names
 from bundle import app_filename, apply_bundle_settings, bundle_settings, converted_bundle_id
 from keychain import keychain_configuration, prepare_keychain_directory
 
@@ -72,6 +72,30 @@ def signing_targets(app: Path, binaries: list[Binary], executable: Path) -> list
             if parent.suffix in (".framework", ".bundle", ".app", ".xpc"):
                 targets.add(parent)
     return sorted(targets, key=lambda target: (-len(target.parts), str(target)))
+
+def check_runtime(inspection: dict, libraries: list[str] | None = None) -> dict:
+    app = Path(inspection["path"])
+    frameworks = app / "Frameworks"
+    runtime_name = Path(RUNTIME_LIBRARY).name.casefold()
+    if frameworks.exists() or frameworks.is_symlink():
+        if not frameworks.is_dir():
+            raise MachOError(f"Frameworks must be a directory: {frameworks}")
+        if any(item.name.casefold() == runtime_name for item in frameworks.iterdir()):
+            raise MachOError("Mac runtime destination already exists: Frameworks/UnipaRuntime.dylib")
+
+    libraries = libraries or []
+    if any(Path(library).name.casefold() == runtime_name for library in libraries):
+        raise MachOError("UnipaRuntime.dylib is reserved for the Mac runtime")
+
+    binary = MachO(Path(inspection["executable"]).read_bytes())
+    # vtool replaces the legacy iOS version command with a 24-byte LC_BUILD_VERSION.
+    growth = sum(
+        max(0, 24 - size)
+        for command, _, size in commands(binary)
+        if command == 0x25
+    )
+    add_dylibs(binary.data, [*libraries, RUNTIME_LIBRARY], reserved_bytes=growth)
+    return {"runtime_library": RUNTIME_LIBRARY}
 
 def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = False) -> Binary:
     sdk = Path(run_tool("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"))
@@ -148,6 +172,8 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
     main = next(binary for binary in binaries if binary.relative == main_relative)
     if main.platform not in (IOS, MAC_CATALYST):
         raise MachOError("macOS conversion expects an iOS or Mac Catalyst executable")
+
+    check_runtime(inspection)
     
     vtool = run_tool("/usr/bin/xcrun", "--find", "vtool")
     install_name_tool = run_tool("/usr/bin/xcrun", "--find", "install_name_tool")

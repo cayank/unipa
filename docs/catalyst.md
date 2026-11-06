@@ -10,7 +10,7 @@ Every binary must be a decrypted, thin arm64 Mach-O file, and the main executabl
 
 References to `@rpath/libswiftUIKit.dylib` are rewritten to `/System/iOSSupport/usr/lib/swift/libswiftUIKit.dylib`. Each binary is checked again for platform and library paths before signing.
 
-Hooks in `src/hooks/` are compiled into `UnipaRuntime.dylib` and added to the executable as a load command. If the Mach-O header has no room for it, conversion stops.
+Hooks in `src/hooks/` are compiled into `UnipaRuntime.dylib` and added to the executable as a load command. Before dumping, unipa checks that this filename is available and the header has room for the runtime and any injected libraries, including growth from legacy version commands. Conversion checks the runtime requirements again before copying the app.
 
 ## Bundle settings
 

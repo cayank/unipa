@@ -1,5 +1,6 @@
 import { execute } from "./process";
 import { runMachO } from "./macho/run";
+import type { InjectedLibrary } from "./inject";
 
 type CatalystBinary = {
   binary: string;
@@ -51,6 +52,12 @@ export async function checkCatalystTools(): Promise<void> {
   } catch (error) {
     throw new Error("--macos requires Xcode Command Line Tools; install them with xcode-select --install", { cause: error });
   }
+}
+
+export async function checkCatalystRuntime(app: string, libraries: InjectedLibrary[] = []): Promise<void> {
+  const args = ["--app", app];
+  for (const library of libraries) args.push("--dylib", library.load_command);
+  await runMachO("check-macos-runtime", args);
 }
 
 export async function createCatalystApp(

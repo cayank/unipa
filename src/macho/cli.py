@@ -9,7 +9,7 @@ import stat
 import sys
 from pathlib import Path
 from bundle import configure_bundle
-from catalyst import convert_bundle
+from catalyst import check_runtime, convert_bundle
 from inject import apply_injection, prepare_injection
 from reader import (
     FAT_MAGICS,
@@ -165,6 +165,10 @@ def parse_args() -> argparse.Namespace:
     settings.add_argument("--bundle-id", nargs="?", const="")
     settings.add_argument("--bundle-name", nargs="?", const="")
 
+    runtime = commands.add_parser("check-macos-runtime")
+    runtime.add_argument("--app", type=Path, required=True)
+    runtime.add_argument("--dylib", action="append", default=[])
+
     macos = commands.add_parser("convert-macos")
     macos.add_argument("--app", type=Path, required=True)
     macos.add_argument("--output-dir", type=Path, required=True)
@@ -210,6 +214,9 @@ def run_command(args: argparse.Namespace) -> dict:
 
     if args.command == "configure-bundle":
         return configure_bundle(args.app, args.bundle_id, args.bundle_name)
+
+    if args.command == "check-macos-runtime":
+        return check_runtime(bundle_info(args.app), args.dylib)
 
     if args.command == "convert-macos":
         return convert_bundle(inspect_bundle(args.app), args.output_dir, args.identity, args.keychain_instance, args.bundle_id, args.bundle_name)

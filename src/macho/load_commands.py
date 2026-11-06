@@ -54,7 +54,9 @@ def dylib_names(binary: MachO) -> set[str]:
         names.add(name.split(b"\0", 1)[0].decode("utf-8"))
     return names
 
-def add_dylibs(data: bytes, names: list[str]) -> bytes:
+def add_dylibs(data: bytes, names: list[str], *, reserved_bytes: int = 0) -> bytes:
+    if reserved_bytes < 0:
+        raise MachOError("Reserved header space cannot be negative")
     binary = MachO(data)
     existing = dylib_names(binary)
     content_offsets = []
@@ -93,7 +95,8 @@ def add_dylibs(data: bytes, names: list[str]) -> bytes:
 
     start = binary.header_size
     end = start + len(added)
-    if (not content_offsets or end > min(content_offsets) or end > len(data) or any(data[start:end])):
+    reserved_end = end + reserved_bytes
+    if (not content_offsets or reserved_end > min(content_offsets) or reserved_end > len(data) or any(data[start:reserved_end])):
         raise MachOError("Not enough unused Mach-O header space for dylib load commands")
     
     result = bytearray(data)

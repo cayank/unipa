@@ -12,6 +12,7 @@ import {
   execute,
   cleanupRun,
   checkCatalystTools,
+  checkCatalystRuntime,
   createCatalystApp,
   configureBundle,
   runDirectoryPrefix,
@@ -286,6 +287,8 @@ async function main() {
     log.info("Preparing injected libraries…");
     injection = await prepareInjection(source.path, options.injectedLibraries, workspace);
   }
+
+  if (options.macos) await checkCatalystRuntime(source.path, injection?.libraries);
 
   let app = path.join(workspace, "Payload", path.basename(source.path));
   await mkdir(path.dirname(app), { mode: 0o700 });
