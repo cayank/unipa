@@ -18,7 +18,7 @@ To use an exact ID:
 unipa --app /Applications/Example.app --bundle-id com.example.mycopy
 ```
 
-An explicit ID gets no additional suffix in either output. Related nested app and extension IDs that start with the original ID plus a dot receive the same prefix change. Framework and resource bundle IDs are left alone.
+An explicit ID gets no additional suffix in either output. Related nested app and extension IDs that start with the original ID plus a dot receive the same prefix change. Framework and resource bundle IDs are left alone. The same prefix rules apply to the Mac copy’s default ID.
 
 Without this flag, the IPA keeps its original ID. The Mac copy uses `.unipalocal`, with an additional instance suffix for a nondefault isolated Keychain instance. An explicit `--bundle-id` overrides those Mac suffixes.
 

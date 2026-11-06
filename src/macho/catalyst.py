@@ -13,7 +13,7 @@ from pathlib import Path
 from entitlements import compatibility_sandbox, configure_location_access, macos_entitlements
 from reader import MachO, MachOError
 from load_commands import add_dylibs, build_platform, dylib_names
-from bundle import app_filename, bundle_settings, converted_bundle_id
+from bundle import app_filename, apply_bundle_settings, bundle_settings, converted_bundle_id
 from keychain import keychain_configuration, prepare_keychain_directory
 
 ARM64 = 0x100000C
@@ -188,6 +188,10 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
             if item.is_symlink() and not item.resolve().is_relative_to(pending):
                 raise MachOError(f"Copied bundle symlink escapes app: {item}")
 
+        apply_bundle_settings(
+            pending, settings, update_name=bundle_name is not None, rename_app=False
+        )
+
         for binary in binaries:
             path = pending / binary.relative
             if binary.platform == IOS:
@@ -219,11 +223,8 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
             
         info_path = pending / "Info.plist"
         info = plistlib.loads(info_path.read_bytes())
-        info.setdefault("CFBundleName", inspection["name"])
-        info.setdefault("CFBundleDisplayName", inspection["name"])
         info.update(
             {
-                "CFBundleIdentifier": report["bundle_id"],
                 "MinimumOSVersion": "11.0",
                 "LSMinimumSystemVersion": "11.0",
                 "UIDeviceFamily": [1],
@@ -234,13 +235,6 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
             info["UnipaKeychain"] = {"BundleIdentifier": keychain["bundle_id"], "Instance": keychain_instance}
         else:
             info.pop("UnipaKeychain", None)
-        if bundle_name is not None:
-            info["CFBundleName"] = settings["name"]
-            info["CFBundleDisplayName"] = settings["name"]
-            for localized in pending.glob("*.lproj/InfoPlist.strings"):
-                run_tool("/usr/bin/plutil", "-convert", "binary1", str(localized))
-                for key in ("CFBundleName", "CFBundleDisplayName"):
-                    run_tool("/usr/bin/plutil", "-replace", key, "-string", settings["name"], str(localized))
         info.pop("UISupportedInterfaceOrientations~ipad", None)
         info.pop("UISupportedInterfaceOrientations~iphone", None)
         location_access = configure_location_access(info)

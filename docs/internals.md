@@ -48,7 +48,7 @@ Recovery supports thin, little-endian 64-bit Mach-O only. FAT/universal source a
 
 ## Bundle metadata
 
-After recovery, `src/bundle.ts` calls the Python `configure-bundle` command in `src/macho/bundle.py` when a bundle ID or name override was requested. The staged app is updated before injection and signing; its executable filename and code remain unchanged. Related nested app/extension IDs receive the new prefix. Random values are generated once and recorded under `bundle` in the manifest, then reused for Mac output. See [bundle settings](bundle.md).
+After recovery, `src/bundle.ts` calls the Python `configure-bundle` command in `src/macho/bundle.py` when a bundle ID or name override was requested. The staged app is updated before injection and signing; its executable filename and code remain unchanged. Related nested app/extension IDs receive the new prefix. Random values are generated once and recorded under `bundle` in the manifest, then reused for Mac output. Mac conversion applies its resolved settings through the same `apply_bundle_settings` function, which updates root metadata, related nested IDs, and localized names. See [bundle settings](bundle.md).
 
 ## Dylib injection
 

@@ -117,13 +117,38 @@ def configure_bundle(app: Path, bundle_id: str | None, bundle_name: str | None) 
         original_name = app.stem
         
     settings = bundle_settings(original_id, original_name, bundle_id, bundle_name)
-    target = app if bundle_name is None else app.with_name(app_filename(settings["name"], app.name))
-    if target != app and (target.exists() or target.is_symlink()):
-        raise MachOError(f"Bundle destination already exists: {target}")
+    return apply_bundle_settings(app, settings,
+                                 update_id=bundle_id is not None, update_name=bundle_name is not None)
 
+def apply_bundle_settings(
+    app: Path,
+    settings: dict,
+    *,
+    update_id: bool = True,
+    update_name: bool = False,
+    rename_app: bool = True,
+) -> dict:
+    app = app.resolve(strict=True)
+    info_path = app / "Info.plist"
+    info = _read_info(info_path, app)
+    original_id = info.get("CFBundleIdentifier")
+    if not isinstance(original_id, str) or not original_id:
+        raise MachOError("Bundle settings require a CFBundleIdentifier")
+
+    target = app
+    if rename_app and update_name:
+        target = app.with_name(app_filename(settings["name"], app.name))
+    same_app = False
+    if target != app and (target.exists() or target.is_symlink()):
+        same_app = not target.is_symlink() and target.samefile(app)
+        if not same_app:
+            raise MachOError(f"Bundle destination already exists: {target}")
+
+    info.setdefault("CFBundleName", settings["name"])
+    info.setdefault("CFBundleDisplayName", settings["name"])
     changes = []
     nested_ids = []
-    if bundle_id is not None:
+    if update_id:
         info["CFBundleIdentifier"] = settings["bundle_id"]
         for nested in app.rglob("Info.plist"):
             if nested == info_path or nested.parent.suffix not in (".app", ".appex"):
@@ -138,7 +163,7 @@ def configure_bundle(app: Path, bundle_id: str | None, bundle_name: str | None) 
                 changes.append((nested, child))
                 nested_ids.append({"bundle": str(nested.parent.relative_to(app)), "bundle_id": child["CFBundleIdentifier"]})
 
-    if bundle_name is not None:
+    if update_name:
         info["CFBundleName"] = settings["name"]
         info["CFBundleDisplayName"] = settings["name"]
         for localized in app.glob("*.lproj/InfoPlist.strings"):
@@ -151,5 +176,19 @@ def configure_bundle(app: Path, bundle_id: str | None, bundle_name: str | None) 
         _write_info(file, values)
 
     if target != app:
-        app.rename(target)
+        if same_app:
+            temporary = Path(tempfile.mkdtemp(prefix=".unipa-rename-", dir=app.parent))
+            moved = temporary / "App.app"
+            try:
+                app.rename(moved)
+                try:
+                    moved.rename(target)
+                except OSError:
+                    moved.rename(app)
+                    raise
+            finally:
+                if not moved.exists():
+                    temporary.rmdir()
+        else:
+            app.rename(target)
     return {"app": str(target), "original_bundle_id": original_id, **settings, "nested_bundles": nested_ids}
