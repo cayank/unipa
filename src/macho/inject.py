@@ -1,4 +1,4 @@
-"""Prepare local dylibs and embed them into a recovered iOS app."""
+"""Prepare local dylibs and embed them into a recovered iOS app"""
 
 from __future__ import annotations
 

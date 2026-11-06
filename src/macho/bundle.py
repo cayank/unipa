@@ -1,4 +1,4 @@
-"""Shared bundle metadata for staged iOS apps and Mac conversions."""
+"""Shared bundle metadata for staged iOS apps and Mac conversions"""
 
 from __future__ import annotations
 

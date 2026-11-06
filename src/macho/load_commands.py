@@ -1,4 +1,4 @@
-"""Read build metadata and add dylib load commands without moving file contents."""
+"""Read build metadata and add dylib load commands without moving file contents"""
 
 import struct
 from reader import MachO, MachOError

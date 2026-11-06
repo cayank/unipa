@@ -1,5 +1,5 @@
 """
-Mach-O parsing and core-memory reads.
+Mach-O parsing and core-memory reads
 File layouts follow XNU's EXTERNAL_HEADERS/mach-o/loader.h
 """
 
@@ -291,22 +291,15 @@ class Core:
                 start = found + 4
         return sorted(bases)
 
-
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
-def _clear_instruction_samples(
-    original: MachO, encryption: Encryption
-) -> list[tuple[int, bytes]]:
-    """Return preferred addresses and bytes from unencrypted code."""
+def _clear_instruction_samples(original: MachO, encryption: Encryption) -> list[tuple[int, bytes]]:
     samples = []
     encrypted_end = encryption.cryptoff + encryption.cryptsize
     for offset, size in original.instruction_ranges:
         intervals = [
-            (
-                max(offset, original.header_size),
-                min(offset + size, encryption.cryptoff),
-            ),
+            (max(offset, original.header_size), min(offset + size, encryption.cryptoff)),
             (max(offset, encrypted_end), offset + size),
         ]
         for start, end in intervals:
@@ -375,6 +368,7 @@ def analyze(core: Core, original: MachO) -> dict:
         except MachOError as error:
             candidate.update({"usable": False, "reason": str(error)})
         candidates.append(candidate)
+
     return {
         "binary": original.info(),
         "disk_sha256": digest(disk),

@@ -7,3 +7,4 @@ export * from "./cleanup";
 export * from "./catalyst";
 export * from "./bundle";
 export * from "./filenames";
+export * from "./macho/run";

@@ -1,4 +1,4 @@
-"""Build a separate Mac Catalyst copy of a decrypted iOS app."""
+"""Build a separate Mac Catalyst copy of a decrypted iOS app"""
 
 from __future__ import annotations
 

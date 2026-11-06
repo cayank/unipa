@@ -1,4 +1,4 @@
-"""Storage namespaces for the optional macOS Keychain compatibility layer."""
+"""Storage namespaces for the optional macOS Keychain compatibility layer"""
 
 from __future__ import annotations
 

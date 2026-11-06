@@ -18,10 +18,12 @@ import {
   runDirectoryPrefix,
   prepareInjection,
   injectLibraries,
+  runMachO,
+  type InjectionPlan,
+  type BundleConfiguration,
+  type BundleInspection,
+  type Recovery,
 } from "./src";
-import type { InjectionPlan } from "./src/inject";
-import type { BundleConfiguration } from "./src/bundle";
-import { runMachO, type BundleInspection, type Recovery } from "./src/macho/run";
 
 const HELP_MESSAGE = `unipa: dump a running iOS app, recover its decrypted binaries, build an IPA
 
@@ -112,7 +114,6 @@ function parseOptions() {
   if (values.core && pid !== undefined) throw new Error("--core and --pid cannot be combined");
   if (values.base && !/^(0x[0-9a-f]+|\d+)$/i.test(values.base)) throw new Error("--base must be a valid address");
   if (values["no-sign"] && values.identity) throw new Error("--no-sign and --identity cannot be combined");
-  // if (values.macos && values.inject?.length) throw new Error("--inject currently supports IPA output only; remove --macos");
   if (values.macos && values["no-sign"]) throw new Error("--macos requires signing; remove --no-sign");
   if (values.macos && values["keep-extensions"]) throw new Error("--macos does not support retained iOS extensions; remove --keep-extensions");
 
@@ -120,7 +121,7 @@ function parseOptions() {
   if (bundleId && (bundleId.length > 255 || !/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*$/.test(bundleId))) {
     throw new Error("--bundle-id must contain letters, digits, hyphens, and nonempty dot-separated components (maximum 255 characters)");
   }
-  
+
   const bundleName = values["bundle-name"];
   if (bundleName && (!bundleName.trim() || bundleName.startsWith(".") || /[/\\:\x00-\x1f\x7f]/.test(bundleName))) {
     throw new Error("--bundle-name must be an app name without path separators or control characters");
