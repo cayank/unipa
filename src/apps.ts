@@ -29,6 +29,7 @@ export async function selectApp(): Promise<string> {
 
   return select({
     message: "Which app should be packaged as an IPA?",
+    pageSize: 10,
     choices: [
       new Separator(),
       ...apps.map((app) => ({
