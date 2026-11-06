@@ -18,7 +18,7 @@ To use an exact ID:
 unipa --app /Applications/Example.app --bundle-id com.example.mycopy
 ```
 
-An explicit ID gets no additional suffix in either output. Related nested app and extension IDs that start with the original ID plus a dot receive the same prefix change. Framework and resource bundle IDs are left alone. The same prefix rules apply to the Mac copy’s default ID.
+An exact ID gets no suffix. Nested app and extension IDs starting with `<original-id>.` receive the new prefix. Framework and resource bundle IDs stay unchanged. The Mac copy follows the same rules.
 
 Without this flag, the IPA keeps its original ID. The Mac copy uses `.unipalocal`, with an additional instance suffix for a nondefault isolated Keychain instance. An explicit `--bundle-id` overrides those Mac suffixes.
 
@@ -38,14 +38,14 @@ Use `--bundle-name random` to generate a name such as `Example_a1b2c3d4`. When b
 unipa --app /Applications/Example.app --bundle-id random --bundle-name random --macos
 ```
 
-The name changes the staged `.app` directory, IPA filename, bundle/display names, and localized display names. The executable filename stays the same. Without a name override, the staged app keeps its inner bundle directory name. Output filenames use the display name, falling back to the bundle name and then the directory name. Run folder and IPA filenames use lowercase, hyphen-separated names with accents removed, such as `example-app-patched.ipa`. The `.app` filenames preserve the chosen name with unsafe filename characters replaced. Long filenames are shortened to fit filesystem limits. Display names are preserved.
+This renames the output app and its display names. IPA filenames use lowercase and hyphens, such as `example-test-patched.ipa`. The executable name stays the same.
 
-Bare `--bundle-id` and `--bundle-name` also request random values. The resolved settings are recorded under `bundle` in `manifest.json`; pass the exact values to reuse them on a later run.
+Bare `--bundle-id` and `--bundle-name` also request random values. The resolved settings are recorded under `bundle` in `manifest.json`. Pass the exact values to reuse them on a later run.
 
 ## Signing and identity
 
 Metadata changes happen after recovery and before injection, signing, and packaging. Changing an ID does not update provisioning profiles, App Groups, Keychain access groups, URL schemes, or IDs embedded in application code and SDK configuration. Apps and backend services that depend on the original ID may stop working.
 
-The IPA still needs suitable signing and provisioning for an iPhone or iPad; see [installing the IPA](../README.md#installing-the-ipa). Mac conversion has its own [sandbox and signing settings](catalyst.md).
+The IPA still needs suitable signing and provisioning for an iPhone or iPad. See [installing the IPA](../README.md#installing-the-ipa). Mac conversion has its own [sandbox and signing settings](catalyst.md).
 
 With [isolated Keychain storage](keychain.md), the overridden ID also selects the Mac app's storage namespace. Renaming alone does not separate records, and changing the bundle ID does not guarantee a new device identifier.

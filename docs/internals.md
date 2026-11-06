@@ -6,7 +6,7 @@ For requirements, compatibility, installation, and everyday usage, see the [READ
 
 Apps are listed with `system_profiler`, and the executable name comes from `CFBundleExecutable`. Both the `Wrapper/*.app` layout and a plain iOS `.app` work. Excluded extensions are skipped during the source inventory scan and removed from the output copy before recovery.
 
-To find the running process, unipa first compares the executable's canonical path. macOS can launch wrapped iOS apps from a relocated `/private/var/folders/.../d/Wrapper/` path, so a different path is accepted only if the executable name and size match and the full SHA256 equals the selected app's executable. The verified runtime path is logged, and hashes are cached until the file metadata changes. A matching process is reused; if there is none, the app is launched.
+To find the running process, unipa first compares the executable's canonical path. macOS can launch wrapped iOS apps from a relocated `/private/var/folders/.../d/Wrapper/` path, so a different path is accepted only if the executable name and size match and the full SHA256 equals the selected app's executable. The verified runtime path is logged, and hashes are cached until the file metadata changes. A matching process is reused. If there is none, the app is launched.
 
 ## Recovery
 
@@ -25,7 +25,7 @@ encrypted_memory_address = slide + encrypted_segment.vmaddr
 
 The core is opened with `mmap`, and headers are searched for inside core segments, not only at segment starts. A runtime header may have a different `cryptid`, but every other header and load command byte must match. Samples from unencrypted instruction sections are also compared with the code on disk. This filters out mappings that share the same header but are not the runtime image, and it can reject code modified by hooks.
 
-Missing core pages are never zero-filled; reads continue across adjacent segments. Candidates are discarded if they are identical to disk, entirely zero, or fail the plaintext code check.
+Missing core pages are never zero-filled, and reads continue across adjacent segments. Candidates are discarded if they are identical to disk, entirely zero, or fail the plaintext code check.
 
 ### Choosing a base
 
@@ -38,25 +38,25 @@ unipa \
   --base 0x102e1c000
 ```
 
-The address is only an example; use one from your own report. `--base` chooses among valid candidates and does not skip any checks. Note that a difference between disk and RAM is not cryptographic proof that the plaintext is correct.
+The address is only an example. Use one from your own report. `--base` chooses among valid candidates and does not skip any checks. Note that a difference between disk and RAM is not cryptographic proof that the plaintext is correct.
 
 ### Patching
 
 The patch changes only the `cryptoff..cryptoff+cryptsize` range and the `cryptid` field in the encryption command. The result is read back and verified, and the source app is never touched. Before packaging, every Mach-O file is scanned again, and if any encrypted executable is left, no IPA is produced.
 
-Recovery supports thin, little-endian 64-bit Mach-O only. FAT/universal source apps and 32-bit files fail with an explicit error. Injection libraries can be universal; one compatible CPU type and subtype is selected before embedding. The encrypted range must sit inside a single executable segment, though in the core it may span several adjacent ones.
+Recovery supports thin, little-endian 64-bit Mach-O only. FAT/universal source apps and 32-bit files fail with an explicit error. Injection libraries can be universal, with one compatible CPU type and subtype selected before embedding. The encrypted range must sit inside a single executable segment, though in the core it may span several adjacent ones.
 
 ## Bundle metadata
 
-After recovery, `src/bundle.ts` calls the Python `configure-bundle` command in `src/macho/bundle.py` when a bundle ID or name override was requested. The staged app is updated before injection and signing; its executable filename and code remain unchanged. Related nested app/extension IDs receive the new prefix. Random values are generated once and recorded under `bundle` in the manifest, then reused for Mac output. Mac conversion applies its resolved settings through the same `apply_bundle_settings` function, which updates root metadata, related nested IDs, and localized names. See [bundle settings](bundle.md).
+`src/bundle.ts` calls `configure-bundle` in `src/macho/bundle.py` to apply requested IDs and names before injection and signing. The shared `apply_bundle_settings` function updates bundle metadata, related nested IDs, and localized names for both outputs. Executable names and code stay unchanged. Random values are generated once, saved under `bundle` in the manifest, and reused for Mac output. See [bundle settings](bundle.md).
 
 ## Dylib injection
 
-`--inject` validates and stages local libraries before dumping, then adds them to the output copy after recovery and before signing. This keeps the original executable header available for matching against the core. `src/inject.ts` calls the Python `prepare-injection` and `inject` commands; `src/macho/load_commands.py` provides build-platform parsing, dylib-path validation, and header-padding checks shared by injection and Mac Catalyst conversion. Libraries are signed and verified individually before the app is signed. Plans, results, and hashes are saved under `injection/` and listed in the manifest. See [dylib injection](injection.md) for usage and limits.
+`src/inject.ts` calls the Python `prepare-injection` and `inject` commands. Validation and staging happen before dumping. Load commands are added after recovery so core matching uses the original header. Shared code in `src/macho/load_commands.py` handles platform parsing, dylib paths, and header space. Plans, results, and hashes are saved under `injection/` and listed in the manifest. See [dylib injection](injection.md).
 
 ## Output files
 
-Each run creates a new folder under `output/<app-name>-XXXXXX/`, using the source app's display name normalized to lowercase ASCII with hyphens, followed by a random suffix. For example, `Example App` becomes `example-app-XXXXXX/`, with `example-app-patched.ipa` inside. Names without usable letters or digits fall back to `app`. Long names are shortened to keep the complete filename within filesystem limits. The default parent is the checkout's `output/` directory. Use `--work-dir` to change it.
+Runs are stored in the checkout's `output/<app-name>-XXXXXX/` directory. The source display name becomes lowercase ASCII with hyphens: `Example App` produces `example-app-XXXXXX/example-app-patched.ipa`. Names with no usable ASCII letters or digits become `app`, and long names are shortened. Use `--work-dir` to change the parent directory.
 
 ```text
 Payload/App.app/                 Patched copy, signed unless disabled
@@ -90,15 +90,15 @@ The Mac Catalyst app, window size, signing, and conversion reports are covered i
 
 After the IPA passes signing and archive checks (and the macOS conversion succeeds, if requested), unipa saves `manifest.json` before cleanup. It then confirms the dumped process still runs the selected executable, sends `SIGKILL` to that exact PID, and deletes the generated core. Failures before the initial manifest is saved leave the app and core in place.
 
-Cores passed with `--core` or `--core-for` are never deleted. `--core` prevents live dumping; `--core-for` supplies a core only for the specified binary, so other binaries may still require a live dump.
+Cores passed with `--core` or `--core-for` are never deleted. `--core` prevents live dumping, while `--core-for` supplies a core only for the specified binary, so other binaries may still require a live dump.
 
-The manifest is written atomically with `cleanup.status` set to `pending`, then replaced with cleanup results and a status of `complete` or `failed`. If cleanup fails, the verified IPA is kept, a warning is shown, and the exit code is nonzero. If saving the final results fails, the initial manifest remains with `pending` status; the app may already be closed and the core deleted.
+The manifest is written atomically with `cleanup.status` set to `pending`, then replaced with cleanup results and a status of `complete` or `failed`. If cleanup fails, the verified IPA is kept, a warning is shown, and the exit code is nonzero. If saving the final results fails, the initial manifest remains with `pending` status. The app may already be closed and the core deleted.
 
-The [cleanup script](../scripts/clean-cores.ts) removes only regular `process.core` files directly inside recognized run folders under the chosen output directory. The prefix must match the source display name in a regular `source.json` file, using the same filename normalization and shortening. The suffix must contain six letters or digits. It leaves IPAs, app copies, extracted regions, and reports alone, skips symlinks, and reports unreadable runs without stopping on them. The commands are in the [README](../README.md#cleanup).
+The [cleanup script](../scripts/clean-cores.ts) removes regular `process.core` files directly inside recognized run folders. It checks the prefix against a regular `source.json` file using the same name normalization and requires a six-character alphanumeric suffix. Symlinks and other artifacts are skipped. Unreadable runs are reported without stopping cleanup. See the [README](../README.md#cleanup) for commands.
 
 ## Development
 
-Log lines use the labels `[INFO]`, `[SUCCESS]`, `[WARN]`, and `[ERROR]`. Warnings and errors go to stderr, everything else to stdout. Colors are off when output is redirected; set `NO_COLOR=1` to disable them or `FORCE_COLOR=1` to force them.
+Log levels are `[INFO]`, `[SUCCESS]`, `[WARN]`, and `[ERROR]`. Warnings and errors go to stderr. Streamed command output includes the executable name and keeps its original stdout/stderr stream. Colors are off when redirected. Use `NO_COLOR=1` or `FORCE_COLOR=1` to override.
 
 From the project directory:
 
@@ -116,4 +116,4 @@ python3 -B src/macho/cli.py recover --binary /path/to/executable --core /path/to
 python3 -B src/macho/cli.py patch --binary /path/to/executable --region /tmp/new-recovery/region.bin --output /tmp/new-executable
 ```
 
-`UNIPA_PYTHON=/path/to/python3` selects the Python interpreter. Tests use synthetic Mach-O files, cores, and fixture apps; they do not launch installed third-party apps or use `sudo`. The macOS tests compile and execute fixture processes and rely on `xcrun clang`, `vtool`, `install_name_tool`, `codesign`, `plutil`, `openssl`, `ditto`, and `unzip`. Keychain test commands and coverage are described in [Keychain storage](keychain.md#verification).
+`UNIPA_PYTHON=/path/to/python3` selects the Python interpreter. Tests use synthetic Mach-O files, cores, and fixture apps. They do not launch installed third-party apps or use `sudo`. The macOS tests compile and execute fixture processes and rely on `xcrun clang`, `vtool`, `install_name_tool`, `codesign`, `plutil`, `openssl`, `ditto`, and `unzip`. Keychain test commands and coverage are described in [Keychain storage](keychain.md#verification).

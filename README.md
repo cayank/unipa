@@ -85,13 +85,13 @@ It needs the Xcode Command Line Tools (`xcode-select --install`) and cannot be c
 
 ### Dylib injection
 
-Use `--inject` to embed a local iOS dylib into the output app. Repeat the flag for multiple libraries; `.dylib.gz` and `.dylib.xz` files are also accepted.
+Use `--inject` to embed a local iOS dylib into the output app. Repeat the flag for multiple libraries. Compressed `.dylib.gz` and `.dylib.xz` files are also accepted.
 
 ```bash
 unipa --app /Applications/Example.app --inject ./dylibs/unipa-flex.dylib
 ```
 
-Keep downloaded libraries in the Git-ignored `dylibs/` directory, or pass a file from any other location. Add `--macos` to convert the injected copy into a Mac app as well; the library and its dependencies must be compatible with conversion. See [dylib injection](docs/injection.md) for configuration, architecture selection, and signing details.
+Store libraries in the Git-ignored `dylibs/` directory or pass any local path. Add `--macos` to build an injected Mac copy if the library and its dependencies support conversion. See [dylib injection](docs/injection.md) for details.
 
 ## Extensions
 
@@ -111,9 +111,9 @@ To keep most extensions but drop one, add `--exclude-extension NotificationServi
 
 ## Output and signing
 
-Each run creates a folder like `output/<app-name>-XXXXXX/` with the IPA, a patched copy of the app, and recovery reports. Run folder and IPA filenames use the app's display name in lowercase with accents removed and words separated by hyphens, so `Example App` becomes `example-app`. Long names are shortened to fit filesystem limits. The default parent is this checkout's `output/` directory; use `--work-dir` to change it. If a run fails, the folder is kept so you can look at it.
+Each run saves the IPA, patched app, and recovery reports under `output/<app-name>-XXXXXX/` in the checkout. Folder and IPA names use lowercase and hyphens, with accents removed (`Example App` → `example-app`). Long names are shortened. Use `--work-dir` to choose another parent directory. Failed runs keep their files.
 
-Signing is ad-hoc by default. `--identity 'Apple Development: …'` picks a different identity, and `--no-sign` skips signing (patching breaks the original signature either way). Source app binaries must be thin, little-endian 64-bit Mach-O files. Universal injection libraries are supported by selecting a compatible architecture; FAT source apps and 32-bit binaries are rejected.
+Signing is ad-hoc by default. `--identity 'Apple Development: …'` picks a different identity, and `--no-sign` skips signing (patching breaks the original signature either way). Source app binaries must be thin, little-endian 64-bit Mach-O files. Universal injection libraries are supported by selecting a compatible architecture. FAT source apps and 32-bit binaries are rejected.
 
 ## Installing the IPA
 
