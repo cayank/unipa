@@ -56,4 +56,6 @@ macos/entitlements.plist  Entitlements used for the outer app
 
 The `.app` appears under its final name only after verification passes. Successful conversions are recorded under `macos` in `manifest.json`; normal runs set it to `null`.
 
-If conversion fails, the verified IPA, the conversion report, and the unfinished app copy are kept, and automatic app and core cleanup is skipped. unipa never installs or launches the generated app. The IPA still needs signing and provisioning for wherever you install it.
+If conversion fails, any IPA already built is kept and automatic app and core cleanup is skipped. The conversion report and any unfinished app copy are kept if they were created; early validation failures can occur before either exists.
+
+unipa never installs or launches the generated app. The IPA still needs signing and provisioning for wherever you install it.
