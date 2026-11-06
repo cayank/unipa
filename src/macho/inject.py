@@ -11,6 +11,7 @@ import stat
 import struct
 import tempfile
 from pathlib import Path
+from artifacts import write_json, write_new
 from load_commands import add_dylibs, build_platform
 from reader import FAT_MAGICS, MH_DYLIB, MH_EXECUTE, MachO, MachOError, digest
 
@@ -186,12 +187,6 @@ def check_destinations(app: Path, libraries: list[dict]) -> None:
                 raise MachOError(f"Injection destination already exists or is duplicated: {relative}")
             names.add(path.name.casefold())
 
-def write_new(path: Path, data: bytes, mode: int = 0o600) -> None:
-    with path.open("xb") as handle:
-        handle.write(data)
-
-    path.chmod(mode)
-
 def prepare_injection(info: dict, sources: list[Path], output_dir: Path) -> dict:
     app = Path(info["path"])
     output_dir = output_dir.resolve()
@@ -228,7 +223,7 @@ def prepare_injection(info: dict, sources: list[Path], output_dir: Path) -> dict
         "subtype": target.subtype,
         "libraries": libraries,
     }
-    write_new(output_dir / "plan.json", (json.dumps(plan, indent=2) + "\n").encode())
+    write_json(output_dir / "plan.json", plan)
     return plan
 
 def apply_injection(info: dict, prepared_dir: Path) -> dict:
@@ -318,5 +313,5 @@ def apply_injection(info: dict, prepared_dir: Path) -> dict:
             Path(temporary).unlink(missing_ok=True)
 
     result = {"executable": str(executable.relative_to(app)), "libraries": libraries}
-    write_new(prepared_dir / "result.json", (json.dumps(result, indent=2) + "\n").encode())
+    write_json(prepared_dir / "result.json", result)
     return result

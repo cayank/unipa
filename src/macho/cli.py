@@ -8,6 +8,7 @@ import plistlib
 import stat
 import sys
 from pathlib import Path
+from artifacts import write_json, write_new
 from bundle import configure_bundle
 from catalyst import check_runtime, convert_bundle
 from inject import apply_injection, prepare_injection
@@ -107,14 +108,6 @@ def inspect_bundle(app: Path, excluded_extensions: list[str] | None = None) -> d
                 raise MachOError(f"{item}: {error}") from error
 
     return {**info, "binaries": binaries, "encrypted": encrypted}
-
-def write_new(path: Path, data: bytes, mode: int = 0o600) -> None:
-    with path.open("xb") as handle:
-        handle.write(data)
-    path.chmod(mode)
-
-def write_json(path: Path, value: dict) -> None:
-    write_new(path, (json.dumps(value, indent=2) + "\n").encode())
 
 def recover(
     binary_path: Path, core_path: Path, output_dir: Path, base: int | None
