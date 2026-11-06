@@ -8,7 +8,7 @@ Takes a running iOS app on an Apple Silicon Mac, pulls its decrypted code out of
 
 - Apple Silicon Mac
 - macOS 15.0 to 15.2 for live dumps (see [Compatibility](#compatibility))
-- Bun (Node.js is not supported)
+- Bun 1.4.4+ (Node.js is not supported)
 - Python 3.10+ (standard library only, no pip packages)
 - `gcore`, `ditto`, `codesign`, and `unzip`
 

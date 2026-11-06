@@ -4,6 +4,9 @@
   "description": "Takes a core dump of an iOS app running on macOS, locates the encrypted Mach-O regions, extracts them from memory, patches copies of the executables, and produces an IPA containing `Payload/*.app`.",
   "private": true,
   "type": "module",
+  "engines": {
+    "bun": ">=1.4.4"
+  },
   "os": [
     "darwin"
   ],
