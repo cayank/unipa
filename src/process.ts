@@ -21,29 +21,22 @@ class CommandError extends Error {
   }
 }
 
-async function readOutput(stream: ReadableStream<Uint8Array>, onLine?: (line: string) => void): Promise<string> {
+async function readOutput(stream: ReadableStream<NodeJS.BufferSource>, onLine?: (line: string) => void): Promise<string> {
   if (!onLine) return new Response(stream).text();
 
-  const decoder = new TextDecoder();
   let output = "";
   let pending = "";
 
-  const append = (text: string): void => {
+  for await (const text of stream.pipeThrough(new TextDecoderStream())) {
     output += text;
-    pending += text;
+    const lines = (pending + text).split("\n");
+    pending = lines.pop() ?? "";
 
-    let newline: number;
-    while ((newline = pending.indexOf("\n")) !== -1) {
-      onLine(pending.slice(0, newline).replace(/\r$/, ""));
-      pending = pending.slice(newline + 1);
+    for (const line of lines) {
+      onLine(line.replace(/\r$/, ""));
     }
-  };
-
-  for await (const chunk of stream) {
-    append(decoder.decode(chunk, { stream: true }));
   }
 
-  append(decoder.decode());
   if (pending) onLine(pending);
   return output;
 }
