@@ -10,6 +10,7 @@ import re
 import subprocess
 import tempfile
 import uuid
+import unicodedata
 from pathlib import Path
 from reader import MachOError
 
@@ -56,20 +57,27 @@ def bundle_settings(
             or name.startswith(".")
             or any(character in name for character in '/\\:')
             or any(ord(character) < 32 or ord(character) == 127 for character in name)
-            or len((name + ".app").encode()) > 255
         )
 
         if unsafe_name:
             raise MachOError(
                 "Bundle name must be a nonempty app name without path separators "
-                "or control characters (maximum 251 UTF-8 bytes)"
+                "or control characters"
             )
         
     return {"bundle_id": identifier, "name": name}
 
 def app_filename(name: str, fallback: str) -> str:
     safe_name = re.sub(r"[/\\:\x00-\x1f\x7f]", "-", name).strip().lstrip(".")
-    safe_name = safe_name.encode()[:251].decode("utf-8", errors="ignore").rstrip()
+    characters = []
+    size = 0
+    for character in safe_name:
+        length = len(unicodedata.normalize("NFD", character).encode())
+        if size + length > 251:
+            break
+        characters.append(character)
+        size += length
+    safe_name = "".join(characters).rstrip()
     return f"{safe_name}.app" if safe_name else fallback
 
 def _read_info(path: Path, app: Path) -> dict:

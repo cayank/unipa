@@ -4,6 +4,7 @@ import { runMachO, type BundleInspection } from "./macho/run";
 import { log } from "./logger";
 import { execute } from "./process";
 import type { InjectedLibrary } from "./inject";
+import { outputFilename } from "./filenames";
 
 export async function pack(app: string, workspace: string, identity: string | undefined, injections: InjectedLibrary[] = []): Promise<string> {
   const inspection = await runMachO<BundleInspection>("inspect-bundle", ["--app", app]);
@@ -23,7 +24,7 @@ export async function pack(app: string, workspace: string, identity: string | un
 
   // ditto includes payload itself and retains symlinks and executable modes
   const pending = path.join(workspace, "archive.pending.zip");
-  const output = path.join(workspace, `${path.basename(app, ".app")}-patched.ipa`);
+  const output = path.join(workspace, outputFilename(path.basename(app, ".app"), "-patched.ipa"));
   log.info("Creating IPA…");
   await execute(["/usr/bin/ditto", "-c", "-k", "--norsrc", "--keepParent", path.join(workspace, "Payload"), pending]);
 

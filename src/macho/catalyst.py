@@ -155,7 +155,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
     output_dir.mkdir(parents=True, mode=0o700)
     output_name = app_filename(settings["name"], source.name)
     output = output_dir / output_name
-    pending = output_dir / f".{Path(output_name).stem}.pending.app"
+    pending = output_dir / ".pending.app"
     report_path = output_dir / "conversion.json"
     report = {
         "status": "converting",

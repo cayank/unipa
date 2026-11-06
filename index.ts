@@ -14,6 +14,7 @@ import {
   checkCatalystTools,
   createCatalystApp,
   configureBundle,
+  runDirectoryPrefix,
   prepareInjection,
   injectLibraries,
 } from "./src";
@@ -120,8 +121,8 @@ function parseOptions() {
   }
   
   const bundleName = values["bundle-name"];
-  if (bundleName && (!bundleName.trim() || bundleName.startsWith(".") || /[/\\:\x00-\x1f\x7f]/.test(bundleName) || Buffer.byteLength(bundleName) > 251)) {
-    throw new Error("--bundle-name must be an app name without path separators or control characters (maximum 251 UTF-8 bytes)");
+  if (bundleName && (!bundleName.trim() || bundleName.startsWith(".") || /[/\\:\x00-\x1f\x7f]/.test(bundleName))) {
+    throw new Error("--bundle-name must be an app name without path separators or control characters");
   }
 
   const isolatedKeychain = values["isolated-keychain"] || values["keychain-instance"] !== undefined;
@@ -231,7 +232,7 @@ async function createWorkspace(selected: string, sourcePath: string, workDir: st
   if (insideSource(outputRoot)) throw new Error("Working directory resolves inside the source .app");
   await mkdir(outputRoot, { recursive: true, mode: 0o700 });
   const appName = path.basename(sourcePath, ".app");
-  const workspace = await mkdtemp(path.join(outputRoot, `${appName.toLowerCase()}-`));
+  const workspace = await mkdtemp(path.join(outputRoot, runDirectoryPrefix(appName)));
   await chmod(workspace, 0o700);
   return workspace;
 }

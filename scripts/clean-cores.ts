@@ -2,6 +2,7 @@ import { lstat, readFile, readdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { log } from "../src/logger";
+import { runDirectoryPrefix } from "../src/filenames";
 
 const HELP_MESSAGE = `Delete generated core dumps while keeping IPAs and recovery reports.
 
@@ -30,7 +31,7 @@ async function isAppRun(folder: string): Promise<boolean> {
 
   if (typeof source?.path !== "string") return false;
   const appName = path.basename(source.path, ".app");
-  const prefixes = [`${appName.toLowerCase()}-`, `${appName}-`];
+  const prefixes = [runDirectoryPrefix(appName), `${appName.toLowerCase()}-`, `${appName}-`];
   return prefixes.some((prefix) => name.startsWith(prefix) && /^[A-Za-z0-9]{6}$/.test(name.slice(prefix.length)));
 }
 

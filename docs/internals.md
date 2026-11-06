@@ -56,7 +56,7 @@ After recovery, `src/bundle.ts` calls the Python `configure-bundle` command in `
 
 ## Output files
 
-Each run creates a new folder under `output/<app-name>-XXXXXX/`, using the lowercase `.app` bundle name followed by a random suffix. The default parent is the checkout's `output/` directory. Use `--work-dir` to change it.
+Each run creates a new folder under `output/<app-name>-XXXXXX/`, using the lowercase `.app` bundle name followed by a random suffix. Long names are shortened to keep the complete folder name within filesystem limits. The default parent is the checkout's `output/` directory. Use `--work-dir` to change it.
 
 ```text
 Payload/App.app/                 Patched copy, signed unless disabled

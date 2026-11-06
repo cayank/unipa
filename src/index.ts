@@ -6,3 +6,4 @@ export * from "./inject";
 export * from "./cleanup";
 export * from "./catalyst";
 export * from "./bundle";
+export * from "./filenames";
