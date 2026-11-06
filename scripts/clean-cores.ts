@@ -88,7 +88,7 @@ async function main(): Promise<void> {
     const runPath = path.join(outputDir, folder.name);
     const corePath = path.join(runPath, "process.core");
     try {
-      if (!folder.name.startsWith("unipa-") && !(await isAppRun(runPath))) continue;
+      if (!(await isAppRun(runPath))) continue;
       const info = await lstat(corePath);
       if (!info.isFile()) continue;
 
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
   }
 
   if (fileCount > 0) {
-    const label = fileCount === 1 ? "core file" : "core files";
+    const label = `core file${fileCount === 1 ? "" : "s"}`;
     const summary = `${fileCount} ${label}, ${formatSize(totalBytes)}`;
 
     if (dryRun) {

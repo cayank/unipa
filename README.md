@@ -133,7 +133,7 @@ bun run clean:cores
 bun run clean:cores --work-dir /path/to/output
 ```
 
-Only regular `process.core` files directly inside recognized run folders are removed. App-named folders are checked against `source.json`; older run folders are also supported. Symlinks and all other output are left alone.
+Only regular `process.core` files directly inside recognized run folders are removed. Run folders are checked against `source.json`. Symlinks and all other output are left alone.
 
 More on how recovery works, the report files, and development commands is in [Internals](docs/internals.md).
 

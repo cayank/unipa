@@ -94,7 +94,7 @@ Cores passed with `--core` or `--core-for` are never deleted. `--core` prevents 
 
 The manifest is written atomically with `cleanup.status` set to `pending`, then replaced with cleanup results and a status of `complete` or `failed`. If cleanup fails, the verified IPA is kept, a warning is shown, and the exit code is nonzero. If saving the final results fails, the initial manifest remains with `pending` status; the app may already be closed and the core deleted.
 
-The [cleanup script](../scripts/clean-cores.ts) removes only regular `process.core` files directly inside recognized run folders under the chosen output directory. For app-named folders, the prefix must match the source app in a regular `source.json` file and the suffix must contain six letters or digits. Older run folders are also supported. It leaves IPAs, app copies, extracted regions, and reports alone, skips symlinks, and reports unreadable runs without stopping on them. The commands are in the [README](../README.md#cleanup).
+The [cleanup script](../scripts/clean-cores.ts) removes only regular `process.core` files directly inside recognized run folders under the chosen output directory. For app-named folders, the prefix must match the source app in a regular `source.json` file, with the same shortening for long names. The suffix must contain six letters or digits. It leaves IPAs, app copies, extracted regions, and reports alone, skips symlinks, and reports unreadable runs without stopping on them. The commands are in the [README](../README.md#cleanup).
 
 ## Development
 
