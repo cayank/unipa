@@ -21,17 +21,31 @@ class CommandError extends Error {
   }
 }
 
-async function readOutput(stream: ReadableStream<Uint8Array>, destination?: NodeJS.WriteStream): Promise<string> {
-  if (!destination) return new Response(stream).text();
+async function readOutput(stream: ReadableStream<Uint8Array>, onLine?: (line: string) => void): Promise<string> {
+  if (!onLine) return new Response(stream).text();
 
   const decoder = new TextDecoder();
   let output = "";
+  let pending = "";
+
+  const append = (text: string): void => {
+    output += text;
+    pending += text;
+
+    let newline: number;
+    while ((newline = pending.indexOf("\n")) !== -1) {
+      onLine(pending.slice(0, newline).replace(/\r$/, ""));
+      pending = pending.slice(newline + 1);
+    }
+  };
+
   for await (const chunk of stream) {
-    destination.write(chunk);
-    output += decoder.decode(chunk, { stream: true });
+    append(decoder.decode(chunk, { stream: true }));
   }
 
-  return output + decoder.decode();
+  append(decoder.decode());
+  if (pending) onLine(pending);
+  return output;
 }
 
 export async function execute(command: string[], { cwd, interactive = false }: ExecuteOptions = {}): Promise<string> {
@@ -42,9 +56,11 @@ export async function execute(command: string[], { cwd, interactive = false }: E
     stderr: "pipe",
   });
 
+  const executable = path.basename(command[0]!);
+  const name = executable === "sudo" && command[1] ? path.basename(command[1]) : executable;
   const [stdout, stderr, exitCode] = await Promise.all([
-    readOutput(child.stdout, interactive ? process.stdout : undefined),
-    readOutput(child.stderr, interactive ? process.stderr : undefined),
+    readOutput(child.stdout, interactive ? (line) => log.output(name, line, "stdout") : undefined),
+    readOutput(child.stderr, interactive ? (line) => log.output(name, line, "stderr") : undefined),
     child.exited,
   ]);
 

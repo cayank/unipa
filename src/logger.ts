@@ -13,8 +13,7 @@ function useColors(stream: NodeJS.WriteStream): boolean {
   return Boolean(stream.isTTY) && process.env.TERM !== "dumb";
 }
 
-function write(level: Level, message: string): void {
-  const stream = level === "warn" || level === "error" ? process.stderr : process.stdout;
+function write(level: Level, message: string, stream = level === "warn" || level === "error" ? process.stderr : process.stdout): void {
   const label = `[${level.toUpperCase()}]`.padEnd(9);
   const prefix = useColors(stream) ? `${colors[level] ?? ""}${label}\x1b[0m` : label;
   const lines = message.split(/\r?\n/).map((line) => `${prefix} ${line}`);
@@ -22,6 +21,9 @@ function write(level: Level, message: string): void {
 }
 
 export const log = {
+  output(command: string, message: string, stream: "stdout" | "stderr"): void {
+    write("info", `[${command}] ${message}`, process[stream]);
+  },
   info(message: string): void {
     write("info", message);
   },
