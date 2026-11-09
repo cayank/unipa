@@ -300,6 +300,15 @@ async function main() {
     await rm(path.join(app, "PlugIns", extension), { recursive: true });
   }
 
+  let thinned: string[] = [];
+  if (sourceInspection.universal.length) {
+    const result = await runMachO<{ binaries: string[] }>("thin-bundle", ["--app", app]);
+    thinned = result.binaries;
+    for (const binary of thinned) {
+      log.info(`Thinned ${binary}`);
+    }
+  }
+
   await writeFile(
     path.join(workspace, "source.json"),
     JSON.stringify({ ...sourceInspection, selected, host, excluded_extensions: excluded }, null, 2),
@@ -404,6 +413,7 @@ async function main() {
     },
     recoveries,
     excluded_extensions: excluded,
+    thinned_binaries: thinned,
     injections,
     bundle,
     identity: identity ?? null,

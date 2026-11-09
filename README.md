@@ -113,7 +113,7 @@ To keep most extensions but drop one, add `--exclude-extension NotificationServi
 
 Each run saves the IPA, patched app, and recovery reports under `output/<app-name>-XXXXXX/` in the checkout. Folder and IPA names use lowercase and hyphens, with accents removed (`Example App` → `example-app`). Long names are shortened. Use `--work-dir` to choose another parent directory. Failed runs keep their files.
 
-Signing is ad-hoc by default. `--identity 'Apple Development: …'` picks a different identity, and `--no-sign` skips signing (patching breaks the original signature either way). Source app binaries must be thin, little-endian 64-bit Mach-O files. Universal injection libraries are supported by selecting a compatible architecture. FAT source apps and 32-bit binaries are rejected.
+Signing is ad-hoc by default. `--identity 'Apple Development: …'` picks a different identity, and `--no-sign` skips signing (patching breaks the original signature either way). The main executable must be thin, little-endian 64-bit Mach-O. Universal bundled binaries and injected libraries are reduced to a compatible slice in the output copy. 32-bit binaries are rejected.
 
 ## Installing the IPA
 

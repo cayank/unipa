@@ -8,6 +8,7 @@ import plistlib
 import stat
 import sys
 from pathlib import Path
+from universal import read_binary, thin_bundle
 from artifacts import write_json, write_new
 from bundle import configure_bundle
 from catalyst import check_runtime, convert_bundle
@@ -79,6 +80,7 @@ def inspect_bundle(app: Path, excluded_extensions: list[str] | None = None) -> d
 
     encrypted = []
     binaries = []
+    universal = []
     for root, dirs, files in os.walk(app, followlinks=False):
         if Path(root) == app / "PlugIns":
             dirs[:] = [name for name in dirs if name not in excluded]
@@ -100,17 +102,19 @@ def inspect_bundle(app: Path, excluded_extensions: list[str] | None = None) -> d
                 continue
 
             try:
-                binary = MachO(item.read_bytes())
+                binary, thinned = read_binary(item, main_binary)
                 if binary.filetype not in (MH_EXECUTE, MH_DYLIB, MH_BUNDLE):
                     continue
 
                 binaries.append(str(item))
+                if thinned:
+                    universal.append(str(item))
                 if binary.encryption and binary.encryption.cryptid:
                     encrypted.append(str(item))
             except MachOError as error:
                 raise MachOError(f"{item}: {error}") from error
 
-    return {**info, "binaries": binaries, "encrypted": encrypted}
+    return {**info, "binaries": binaries, "encrypted": encrypted, "universal": universal}
 
 def recover(
     binary_path: Path, core_path: Path, output_dir: Path, base: int | None
@@ -150,7 +154,7 @@ def recover(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Inspect and recover Mach-O binaries.")
     commands = parser.add_subparsers(dest="command", required=True)
-    for command in ("bundle-info", "inspect-bundle"):
+    for command in ("bundle-info", "inspect-bundle", "thin-bundle"):
         bundle = commands.add_parser(command)
         bundle.add_argument("--app", type=Path, required=True)
         if command == "inspect-bundle":
@@ -208,6 +212,9 @@ def run_command(args: argparse.Namespace) -> dict:
 
     if args.command == "inspect-bundle":
         return inspect_bundle(args.app, args.exclude_extension)
+
+    if args.command == "thin-bundle":
+        return thin_bundle(inspect_bundle(args.app))
 
     if args.command == "configure-bundle":
         return configure_bundle(args.app, args.bundle_id, args.bundle_name)

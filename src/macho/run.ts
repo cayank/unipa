@@ -24,6 +24,7 @@ export type Bundle = {
 export type BundleInspection = Bundle & {
   binaries: string[];
   encrypted: string[];
+  universal: string[];
 };
 
 export type Recovery = {

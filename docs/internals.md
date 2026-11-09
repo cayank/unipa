@@ -44,7 +44,7 @@ The address is only an example. Use one from your own report. `--base` chooses a
 
 The patch changes only the `cryptoff..cryptoff+cryptsize` range and the `cryptid` field in the encryption command. The result is read back and verified, and the source app is never touched. Before packaging, every Mach-O file is scanned again, and if any encrypted executable is left, no IPA is produced.
 
-Recovery supports thin, little-endian 64-bit Mach-O only. FAT/universal source apps and 32-bit files fail with an explicit error. Injection libraries can be universal, with one compatible CPU type and subtype selected before embedding. The encrypted range must sit inside a single executable segment, though in the core it may span several adjacent ones.
+Universal bundled binaries are reduced to a slice matching the main executable before recovery. Selection and thinning live in `src/macho/universal.py`, shared with injection. Malformed containers and missing or ambiguous matches are rejected. The main executable and core must be thin, little-endian 64-bit Mach-O. Encrypted ranges must fit one executable segment, but may span adjacent core segments.
 
 ## Bundle metadata
 
@@ -61,12 +61,12 @@ Runs are stored in the checkout's `output/<app-name>-XXXXXX/` directory. The sou
 ```text
 Payload/App.app/                 Patched copy, signed unless disabled
 process.core                     Generated core; kept until outputs and initial manifest are saved
-source.json                      Source bundle, retained Mach-O inventory, and excluded extensions
+source.json                      Source bundle, Mach-O inventory, universal binaries, and excluded extensions
 recovery/000/analysis.json       All base candidates and comparison results
 recovery/000/region.bin          Extracted bytes (full cryptsize range)
 recovery/000/executable.patched  Patch result before signing
 recovery/000/result.json         Selected candidate and hashes
-manifest.json                    Verified outputs, bundle overrides, and cleanup status
+manifest.json                    Verified outputs, thinned binaries, bundle overrides, and cleanup status
 app-patched.ipa                  Verified ZIP containing only Payload
 ```
 

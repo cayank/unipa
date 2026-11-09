@@ -9,6 +9,7 @@ import { outputFilename } from "./filenames";
 export async function pack(app: string, workspace: string, identity: string | undefined, injections: InjectedLibrary[] = []): Promise<string> {
   const inspection = await runMachO<BundleInspection>("inspect-bundle", ["--app", app]);
   if (inspection.encrypted.length) throw new Error(`Encrypted files remain before packaging: ${inspection.encrypted.join(", ")}`);
+  if (inspection.universal.length) throw new Error(`Universal binaries remain before packaging: ${inspection.universal.join(", ")}`);
 
   if (identity !== undefined) {
     log.info(`Signing (${identity === "-" ? "ad-hoc" : identity})…`);
