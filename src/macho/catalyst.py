@@ -23,6 +23,12 @@ MAC_CATALYST = 6
 SWIFT_UIKIT = "@rpath/libswiftUIKit.dylib"
 CATALYST_SWIFT_UIKIT = "/System/iOSSupport/usr/lib/swift/libswiftUIKit.dylib"
 RUNTIME_LIBRARY = "@executable_path/Frameworks/UnipaRuntime.dylib"
+WINDOW_GEOMETRY = {
+    "width": 390,
+    "height": 844,
+    "resizable": True,
+    "lock_aspect_ratio": True,
+}
 
 @dataclass(frozen=True)
 class Binary:
@@ -128,6 +134,7 @@ def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = Fal
         "Foundation",
         "-Wl,-install_name," + RUNTIME_LIBRARY,
         str(hooks / "window-geometry.m"),
+        str(hooks / "display-geometry.m"),
         str(hooks / "runtime-environment.m"),
         *keychain_sources,
         "-o",
@@ -200,10 +207,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
             "library": "Frameworks/UnipaRuntime.dylib",
         },
         "window_geometry": {
-            "width": 390,
-            "height": 844,
-            "resizable": True,
-            "lock_aspect_ratio": True,
+            **WINDOW_GEOMETRY,
             "library": "Frameworks/UnipaRuntime.dylib",
         },
     }
@@ -255,6 +259,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
                 "MinimumOSVersion": "11.0",
                 "LSMinimumSystemVersion": "11.0",
                 "UIDeviceFamily": [1],
+                "UnipaDisplay": WINDOW_GEOMETRY.copy(),
                 "UISupportedInterfaceOrientations": ["UIInterfaceOrientationPortrait"],
             }
         )

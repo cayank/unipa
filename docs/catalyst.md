@@ -42,7 +42,7 @@ The app must request location permission through macOS. Conversion does not gran
 
 ## Window size
 
-`src/hooks/window-geometry.m` sets the initial and minimum window content size to 390 × 844, shrinking it to fit the display, and keeps the aspect ratio when resizing.
+`--macos` uses a resizable 390 × 844 window. It shrinks to fit the display and keeps its aspect ratio when resized.
 
 ## Signing and output
 
