@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import plistlib
@@ -13,13 +12,6 @@ import uuid
 import unicodedata
 from pathlib import Path
 from reader import MachOError
-
-def converted_bundle_id(bundle_id: str, instance: str | None) -> str:
-    result = f"{bundle_id}.unipalocal"
-    if instance is not None and instance.lower() != "default":
-        suffix = hashlib.sha256(instance.lower().encode()).hexdigest()[:12]
-        result += f".instance-{suffix}"
-    return result
 
 def bundle_settings(
     original_id: str,

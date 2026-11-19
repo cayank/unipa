@@ -20,7 +20,7 @@ unipa --app /Applications/Example.app --bundle-id com.example.mycopy
 
 An exact ID gets no suffix. Nested app and extension IDs starting with `<original-id>.` receive the new prefix. Framework and resource bundle IDs stay unchanged. The Mac copy follows the same rules.
 
-Without this flag, the IPA keeps its original ID. The Mac copy uses `.unipalocal`, with an additional instance suffix for a nondefault isolated Keychain instance. An explicit `--bundle-id` overrides those Mac suffixes.
+Without this flag, both outputs keep the original bundle ID.
 
 Bundle IDs may contain letters, digits, hyphens, and dots. Underscores and empty components are not accepted.
 
@@ -44,7 +44,7 @@ Bare `--bundle-id` and `--bundle-name` also request random values. The resolved 
 
 ## Signing and identity
 
-Metadata changes happen after recovery and before injection, signing, and packaging. Changing an ID does not update provisioning profiles, App Groups, Keychain access groups, URL schemes, or IDs embedded in application code and SDK configuration. Apps and backend services that depend on the original ID may stop working.
+Metadata changes happen after recovery and before injection, signing, and packaging. Changing an ID does not update provisioning profiles, App Groups, Keychain access groups, URL schemes, or IDs embedded in application code and SDK configuration. SDKs and services tied to the original ID, such as Google Maps, may stop working.
 
 The IPA still needs suitable signing and provisioning for an iPhone or iPad. See [installing the IPA](../README.md#installing-the-ipa). Mac conversion has its own [sandbox and signing settings](catalyst.md).
 

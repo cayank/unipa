@@ -29,7 +29,7 @@ Stores are keyed by bundle ID and instance. `--bundle-id` changes the storage na
 
 Directories are created during conversion with mode `0700`, and databases are created on first use with `0600`. Sandbox write access covers only the selected database and its SQLite journal/WAL/SHM files. Parent-directory read access does not grant access to other databases.
 
-Without `--bundle-id`, each nondefault instance gets a separate `.unipalocal.instance-<hash>` bundle ID and macOS container. An explicit ID is kept as supplied, so different databases can share a macOS app identity. See [bundle settings](bundle.md). Removing the app does not delete its records.
+`--keychain-instance` separates Keychain databases only. Copies with the same bundle ID share macOS app identity and may share other app data. Use [`--bundle-id`](bundle.md) for a separate identity. Removing the app does not delete its records.
 
 The app continues generating its own identifiers. Values stored through the intercepted APIs remain in the selected store. This does not override `identifierForVendor`, preferences, files, Secure Enclave keys, or server-side identity. Changing the generated bundle identifier may affect app behavior independently of Keychain storage.
 

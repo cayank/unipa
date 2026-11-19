@@ -13,7 +13,7 @@ from pathlib import Path
 from entitlements import compatibility_sandbox, configure_location_access, macos_entitlements
 from reader import MachO, MachOError
 from load_commands import add_dylibs, build_platform, commands, dylib_names
-from bundle import app_filename, apply_bundle_settings, bundle_settings, converted_bundle_id
+from bundle import app_filename, apply_bundle_settings, bundle_settings
 from keychain import keychain_configuration, prepare_keychain_directory
 
 ARM64 = 0x100000C
@@ -161,11 +161,10 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
     if not isinstance(bundle_id, str) or not bundle_id:
         raise MachOError("macOS conversion requires a CFBundleIdentifier")
 
-    default_id = converted_bundle_id(bundle_id, keychain_instance)
     settings = bundle_settings(
-        bundle_id, inspection["name"], default_id if bundle_id_override is None else bundle_id_override, bundle_name
+        bundle_id, inspection["name"], bundle_id_override, bundle_name
     )
-    storage_id = settings["bundle_id"] if bundle_id_override is not None else bundle_id
+    storage_id = settings["bundle_id"]
     keychain = keychain_configuration(storage_id, keychain_instance) if keychain_instance is not None else None
     if keychain:
         keychain_instance = keychain["instance"]

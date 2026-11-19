@@ -14,7 +14,7 @@ Hooks in `src/hooks/` are compiled into `UnipaRuntime.dylib` and loaded by the e
 
 ## Bundle settings
 
-The Mac app filename uses the source app's display name, falling back to its bundle name. The executable filename stays the same. Without an ID override, conversion adds `.unipalocal` to the bundle ID and an instance suffix for a nondefault isolated Keychain instance.
+The Mac app filename uses the source app's display name, falling back to its bundle name. The executable filename stays the same. The original bundle ID is preserved unless you use `--bundle-id`.
 
 `--bundle-id` and `--bundle-name` are shared with IPA output. See [bundle settings](bundle.md) for random and exact values, naming, nested IDs, and signing implications.
 
