@@ -1,61 +1,48 @@
 # Isolated Keychain storage
 
-Keychain storage is needed at runtime by apps that save credentials, tokens, keys, or persistent identifiers. It is not required to decrypt an app or build an IPA. Native Keychain behavior remains the default.
-
-For a generated Mac app, enable the optional compatibility layer:
+Apps use Keychain storage for credentials, tokens, keys, and persistent identifiers. Native Keychain remains the default. To use unipa's local store in a generated Mac app:
 
 ```bash
 unipa --app /Applications/Example.app --macos --isolated-keychain
 ```
 
-To use another persistent instance:
+To select another persistent instance:
 
 ```bash
 unipa --app /Applications/Example.app --macos --keychain-instance second
 ```
 
-`--keychain-instance` enables isolated storage and requires `--macos`. Names contain 1–64 letters, digits, dots, underscores, or hyphens, starting with a letter or digit. The instance name is the database filename without `.db`. The default is `default.db`. Storage bundle IDs and instance names are case-insensitive and normalized to lowercase for consistent behavior across filesystems.
+`--keychain-instance` enables isolated storage and requires `--macos`. Names use 1–64 letters, digits, dots, underscores, or hyphens and must start with a letter or digit. Bundle IDs and instance names are normalized to lowercase.
 
 ## Storage and identity
 
 ```text
 ~/Library/Application Support/unipa/Keychain/
-└── <original-bundle-id>/
+└── <bundle-id>/
     ├── default.db
     └── second.db
 ```
 
-Stores are keyed by bundle ID and instance. `--bundle-id` changes the storage namespace, and `--bundle-id random` creates a new one each run. `--bundle-name` has no effect. Rebuilding with the same bundle and instance reuses the store, which persists across restarts, app moves on the same Mac, and output-folder deletion.
+The instance name selects the database file. Rebuilding with the same bundle ID and instance reuses the store. Removing the app or output folder does not delete its records.
 
-Directories are created during conversion with mode `0700`, and databases are created on first use with `0600`. Sandbox write access covers only the selected database and its SQLite journal/WAL/SHM files. Parent-directory read access does not grant access to other databases.
+`--bundle-id` changes the storage namespace. `--bundle-id random` creates a new one each run. Renaming the app has no effect.
 
-`--keychain-instance` separates Keychain databases only. Copies with the same bundle ID share macOS app identity and may share other app data. Use [`--bundle-id`](bundle.md) for a separate identity. Removing the app does not delete its records.
+`--keychain-instance` separates Keychain databases only. Copies with the same bundle ID share macOS app identity and may share other app data. Use [`--bundle-id`](bundle.md) for a separate identity.
 
-The app continues generating its own identifiers. Values stored through the intercepted APIs remain in the selected store. This does not override `identifierForVendor`, preferences, files, Secure Enclave keys, or server-side identity. Changing the generated bundle identifier may affect app behavior independently of Keychain storage.
+Apps still generate their own identifiers. Isolating Keychain storage does not reset `identifierForVendor`, preferences, files, or server-side identity.
 
-## Compatibility
+## Compatibility and security
 
-`src/hooks/keychain.m` interposes `SecItemAdd`, `SecItemCopyMatching`, `SecItemUpdate`, and `SecItemDelete`. The SQLite store in `src/keychain/store.m` supports generic and internet passwords, exportable software keys, and certificates. It handles duplicates, attribute queries, return flags, match limits, and store-specific persistent references. Indexed lookups narrow the search, single-result reads stop at the first match, and updates and deletes are transactional.
+`src/hooks/keychain.m` intercepts `SecItemAdd`, `SecItemCopyMatching`, `SecItemUpdate`, and `SecItemDelete`. The SQLite backend in `src/keychain/store.m` supports generic and internet passwords, exportable software keys, and certificates, including queries, updates, duplicates, and persistent references.
 
-This is a local compatibility store, not Apple's protected Keychain. **Database values, including passwords and exportable private keys, are not encrypted by this backend.** Filesystem permissions restrict access by other users. They do not protect against software running as the same user. Accessibility attributes are metadata, not enforced lock-state policies. Use native Keychain when its security properties are needed.
+**Values, including passwords and exportable private keys, are stored without encryption.** Directories use `0700` and databases use `0600`. Sandbox write access is limited to the selected database and its SQLite journal files. These permissions do not protect against other software running as the same user.
 
-User-presence access controls, iCloud synchronization, nonexportable or Secure Enclave keys, identities, queries using `kSecValueRef`, and unsupported query options return an error. The layer never falls back to another store. It also intercepts `SecKeyCreateRandomKey` and `SecKeyGeneratePair`: software keys use the native generator with the requested algorithm, then permanent private/public records are saved transactionally in the selected database. Ephemeral keys are not saved. Requests for Secure Enclave, token-backed keys, or access controls are rejected rather than converted to ordinary software keys. Other Security.framework APIs are not replaced.
+Accessibility attributes are stored as metadata, not enforced. User-presence controls, iCloud synchronization, nonexportable or Secure Enclave keys, identities, `kSecValueRef` queries, and unsupported options return an error. There is no fallback to another store. Use native Keychain when its security properties are needed.
 
-`kSecUseDataProtectionKeychain` is accepted as a routing selector for this local store, including Firebase/GoogleUtilities queries. It does not enable Apple's Data Protection Keychain or add encryption. Both selector values address the same selected unipa database.
+`SecKeyCreateRandomKey` and `SecKeyGeneratePair` use the native software-key generator. Permanent key records are saved transactionally in the selected store. Ephemeral keys are not saved. Secure Enclave, token-backed keys, and access controls are rejected.
+
+`kSecUseDataProtectionKeychain` is accepted as a routing selector. Both values use the same selected database without enabling Apple's Data Protection Keychain or encryption.
 
 ## PlayCover
 
-This option applies only to the separate `--macos` output. The IPA keeps its original Keychain behavior. No PlayTools or PlayChain code is embedded, and unipa does not read, migrate, modify, or delete PlayCover databases. Conversion rejects isolated storage when the input already includes PlayTools, to avoid competing interceptors.
-
-## Verification
-
-```bash
-python3 -B -m unittest discover -s tests -p test_keychain.py -v
-bun test tests/keychain.test.ts
-```
-
-Tests use synthetic records, temporary stores, and uniquely named fixture apps. They exercise persistence across processes, bundle and instance isolation, CRUD, duplicate handling, return formats, binary values, software-key signing, certificates, concurrent writers, native software-key generation (EC and RSA), key-pair rollback, invalid attribute types, unsafe paths, and actual interposed Security.framework calls under the app sandbox. They do not open existing PlayCover databases or application records.
-
-## Startup failures
-
-The compatibility layer is shared by all generated apps and contains no app-specific device-ID or startup patches. A missing dependency, failed network request, or assertion in the app still needs its own diagnosis. Keychain operation success does not guarantee that every converted iOS app can start or use its backend.
+This option applies only to `--macos` output. The IPA keeps its existing Keychain behavior. No PlayTools or PlayChain code is included, and PlayCover databases are untouched. Inputs containing PlayTools are rejected when isolated storage is enabled.

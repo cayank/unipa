@@ -48,7 +48,7 @@ If the app is already running, unipa uses that process. Otherwise it launches th
   <img src="docs/cli-example.jpg" alt="unipa recovering an app and producing an IPA" width="720">
 </a> -->
 
-To retry patching and packaging from a core you already have, no app launch needed:
+To use an existing core without launching the app:
 
 ```bash
 unipa --app /Applications/Example.app --core /tmp/example.core
@@ -107,7 +107,7 @@ unipa \
   --core-for 'PlugIns/NotificationService.appex/NotificationService=/tmp/notification.core'
 ```
 
-To keep most extensions but drop one, add `--exclude-extension NotificationService.appex` instead. `--core-for` and `--exclude-extension` can each be repeated. If an encrypted executable is left in a kept extension, packaging stops.
+To keep most extensions but drop one, combine `--keep-extensions` with `--exclude-extension NotificationService.appex`. `--core-for` and `--exclude-extension` can each be repeated. If an encrypted executable is left in a kept extension, packaging stops.
 
 ## Output and signing
 
@@ -117,11 +117,11 @@ Signing is ad-hoc by default. `--identity 'Apple Development: …'` picks a diff
 
 ## Installing the IPA
 
-The ad-hoc signature is not enough to install on an iPhone or iPad. You will need to re-sign it, for example with [Sideloadly](https://sideloadly.io/) (see its [FAQ](https://sideloadly.io/faq)). Even then, an IPA that builds fine is not guaranteed to install or run.
+The ad-hoc signature is not enough to install on an iPhone or iPad. You will need to re-sign it, for example with [Sideloadly](https://sideloadly.io/) (see its [FAQ](https://sideloadly.io/faq)). A successful build does not guarantee the app will install or run.
 
 ## Cleanup
 
-Once everything passes verification and `manifest.json` is saved, unipa force-quits the app process it dumped and deletes the core it created. If recovery, packaging, macOS conversion, or the initial manifest write fails, both are left in place so you can investigate.
+After verification and saving `manifest.json`, unipa force-quits the dumped process and deletes its core. If the run fails before cleanup, both are kept for investigation.
 
 Cores you supply with `--core` or `--core-for` are never deleted. `--core` skips live dumping. With only `--core-for`, unipa may still launch and dump the app if another encrypted binary needs a core. If cleanup itself fails, the IPA is kept, the error is written to `manifest.json`, and the exit code is nonzero.
 
@@ -135,7 +135,7 @@ bun run clean:cores --work-dir /path/to/output
 
 Only regular `process.core` files directly inside recognized run folders are removed. Run folders are checked against `source.json`. Symlinks and all other output are left alone.
 
-More on how recovery works, the report files, and development commands is in [Internals](docs/internals.md).
+See [Internals](docs/internals.md) for recovery details, reports, and development commands.
 
 ## License
 

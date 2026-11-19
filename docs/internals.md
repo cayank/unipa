@@ -6,7 +6,7 @@ For requirements, compatibility, installation, and everyday usage, see the [READ
 
 Apps are listed with `system_profiler`, and the executable name comes from `CFBundleExecutable`. Both the `Wrapper/*.app` layout and a plain iOS `.app` work. Excluded extensions are skipped during the source inventory scan and removed from the output copy before recovery.
 
-To find the running process, unipa first compares the executable's canonical path. macOS can launch wrapped iOS apps from a relocated `/private/var/folders/.../d/Wrapper/` path, so a different path is accepted only if the executable name and size match and the full SHA256 equals the selected app's executable. The verified runtime path is logged, and hashes are cached until the file metadata changes. A matching process is reused. If there is none, the app is launched.
+unipa matches the process by executable path. Relocated `/private/var/folders/.../d/Wrapper/` paths are accepted only when the executable name, size, and full SHA256 match. A matching process is reused. Otherwise, the app is launched.
 
 ## Recovery
 
@@ -38,7 +38,7 @@ unipa \
   --base 0x102e1c000
 ```
 
-The address is only an example. Use one from your own report. `--base` chooses among valid candidates and does not skip any checks. Note that a difference between disk and RAM is not cryptographic proof that the plaintext is correct.
+Use an address from your own report. `--base` selects a valid candidate without bypassing checks. Different disk and RAM bytes alone do not prove correct decryption.
 
 ### Patching
 
@@ -56,7 +56,7 @@ Universal bundled binaries are reduced to a slice matching the main executable b
 
 ## Output files
 
-Runs are stored in the checkout's `output/<app-name>-XXXXXX/` directory. The source display name becomes lowercase ASCII with hyphens: `Example App` produces `example-app-XXXXXX/example-app-patched.ipa`. Names with no usable ASCII letters or digits become `app`, and long names are shortened. Use `--work-dir` to change the parent directory.
+Runs use `output/<app-name>-XXXXXX/` in the checkout. Filenames use lowercase ASCII and hyphens, falling back to `app` when needed. Long names are shortened. Use `--work-dir` to change the parent directory.
 
 ```text
 Payload/App.app/                 Patched copy, signed unless disabled
@@ -72,7 +72,7 @@ app-patched.ipa                  Verified ZIP containing only Payload
 
 Failed runs keep their work folder. If the base is ambiguous or missing, `analysis.json` is there to explain why. Recovery artifacts never overwrite existing files, so use a new recovery folder to retry.
 
-unipa is macOS-only (`os: ["darwin"]`) and exits on any other system before doing any work. The host's macOS version, build, and architecture are saved under `host` in `source.json` and `manifest.json`, but no version cutoff is enforced. With an existing core, `host` describes the current machine, which may not be where the dump came from. For live-dump version limits, see [Compatibility](../README.md#compatibility).
+unipa runs only on macOS. Reports record the current host version, build, and architecture without enforcing a version cutoff. With a supplied core, this may differ from the machine that produced it. See [Compatibility](../README.md#compatibility) for live-dump limits.
 
 ## Signing and permissions
 
@@ -94,7 +94,7 @@ Cores passed with `--core` or `--core-for` are never deleted. `--core` prevents 
 
 The manifest is written atomically with `cleanup.status` set to `pending`, then replaced with cleanup results and a status of `complete` or `failed`. If cleanup fails, the verified IPA is kept, a warning is shown, and the exit code is nonzero. If saving the final results fails, the initial manifest remains with `pending` status. The app may already be closed and the core deleted.
 
-The [cleanup script](../scripts/clean-cores.ts) removes regular `process.core` files directly inside recognized run folders. It checks the prefix against a regular `source.json` file using the same name normalization and requires a six-character alphanumeric suffix. Symlinks and other artifacts are skipped. Unreadable runs are reported without stopping cleanup. See the [README](../README.md#cleanup) for commands.
+The [cleanup script](../scripts/clean-cores.ts) removes only regular `process.core` files inside run folders validated against `source.json` and the expected folder name. Symlinks and other artifacts are skipped. Unreadable runs are reported without stopping cleanup. See the [README](../README.md#cleanup) for commands.
 
 ## Development
 
@@ -116,4 +116,4 @@ python3 -B src/macho/cli.py recover --binary /path/to/executable --core /path/to
 python3 -B src/macho/cli.py patch --binary /path/to/executable --region /tmp/new-recovery/region.bin --output /tmp/new-executable
 ```
 
-`UNIPA_PYTHON=/path/to/python3` selects the Python interpreter. Tests use synthetic Mach-O files, cores, and fixture apps. They do not launch installed third-party apps or use `sudo`. The macOS tests compile and execute fixture processes and rely on `xcrun clang`, `vtool`, `install_name_tool`, `codesign`, `plutil`, `openssl`, `ditto`, and `unzip`. Keychain test commands and coverage are described in [Keychain storage](keychain.md#verification).
+`UNIPA_PYTHON=/path/to/python3` selects the Python interpreter.

@@ -1,6 +1,6 @@
 # Bundle settings
 
-`--bundle-id` and `--bundle-name` change the staged app used to build the IPA. With `--macos`, the same requested values also apply to the Mac app. The installed source app is never modified.
+`--bundle-id` and `--bundle-name` apply to the IPA and the optional Mac copy. The installed app is never modified.
 
 ## Bundle ID
 
@@ -18,7 +18,7 @@ To use an exact ID:
 unipa --app /Applications/Example.app --bundle-id com.example.mycopy
 ```
 
-An exact ID gets no suffix. Nested app and extension IDs starting with `<original-id>.` receive the new prefix. Framework and resource bundle IDs stay unchanged. The Mac copy follows the same rules.
+Nested app and extension IDs starting with `<original-id>.` receive the new prefix. Framework and resource bundle IDs stay unchanged.
 
 Without this flag, both outputs keep the original bundle ID.
 
@@ -40,11 +40,11 @@ unipa --app /Applications/Example.app --bundle-id random --bundle-name random --
 
 This renames the output app and its display names. IPA filenames use lowercase and hyphens, such as `example-test-patched.ipa`. The executable name stays the same.
 
-Bare `--bundle-id` and `--bundle-name` also request random values. The resolved settings are recorded under `bundle` in `manifest.json`. Pass the exact values to reuse them on a later run.
+Using either flag without a value also generates a random value. The chosen settings are saved under `bundle` in `manifest.json`.
 
 ## Signing and identity
 
-Metadata changes happen after recovery and before injection, signing, and packaging. Changing an ID does not update provisioning profiles, App Groups, Keychain access groups, URL schemes, or IDs embedded in application code and SDK configuration. SDKs and services tied to the original ID, such as Google Maps, may stop working.
+Changing the bundle ID does not update provisioning profiles, App Groups, Keychain access groups, URL schemes, or IDs embedded in code and SDK configuration. SDKs and services tied to the original ID, such as Google Maps, may stop working.
 
 The IPA still needs suitable signing and provisioning for an iPhone or iPad. See [installing the IPA](../README.md#installing-the-ipa). Mac conversion has its own [sandbox and signing settings](catalyst.md).
 
