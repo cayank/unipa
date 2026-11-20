@@ -1,30 +1,14 @@
-#import "../keychain/store.h"
-#include <pwd.h>
-#include <unistd.h>
-
-static BOOL validComponent(id value) {
-    if (![value isKindOfClass:NSString.class] || ![value length] || [value length] > 255) return NO;
-    NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_"];
-    return ![value hasPrefix:@"."] && [value rangeOfCharacterFromSet:allowed.invertedSet].location == NSNotFound;
-}
+#import "keychain/store.h"
+#import "keychain/instances.h"
 
 static UnipaKeychainStore *store(void) {
     static UnipaKeychainStore *keychain;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         @autoreleasepool {
-            NSDictionary *configuration = [NSBundle.mainBundle objectForInfoDictionaryKey:@"UnipaKeychain"];
-            if (![configuration isKindOfClass:NSDictionary.class]) return;
-            NSString *bundle = configuration[@"BundleIdentifier"], *instance = configuration[@"Instance"];
-            if (!validComponent(bundle) || !validComponent(instance)) return;
-            struct passwd user, *found = NULL;
-            char buffer[16384];
-            if (getpwuid_r(getuid(), &user, buffer, sizeof(buffer), &found) || !found) return;
-            NSString *directory = [[NSString stringWithUTF8String:user.pw_dir]
-                stringByAppendingPathComponent:@"Library/Application Support/unipa/Keychain"];
-            directory = [directory stringByAppendingPathComponent:bundle];
-            NSString *database = [directory stringByAppendingPathComponent:[instance stringByAppendingString:@".db"]];
-            keychain = [[UnipaKeychainStore alloc] initWithDatabasePath:database];
+            NSString *directory = unipaKeychainDirectory(), *instance = unipaActiveKeychainInstance();
+            if (!directory || !instance) return;
+            keychain = [[UnipaKeychainStore alloc] initWithDatabasePath:[directory stringByAppendingPathComponent:[instance stringByAppendingString:@".db"]]];
         }
     });
     return keychain;
@@ -74,6 +58,24 @@ static OSStatus isolatedGeneratePair(CFDictionaryRef parameters, SecKeyRef *publ
     if (privateKey) *privateKey = generated;
     else CFRelease(generated);
     return errSecSuccess;
+}
+
+// The interposed SecItem functions skip unipa's own image, so Device Info reads the store through this.
+OSStatus unipaKeychainCopyMatching(CFDictionaryRef query, CFTypeRef *result) {
+    return isolatedCopyMatching(query, result);
+}
+
+// Called from the unipa menu for the instance in use. Items are deleted per class, as SecItemDelete requires.
+BOOL unipaClearKeychain(void) {
+    UnipaKeychainStore *keychain = store();
+    if (!keychain) return NO;
+    NSArray *classes = @[(__bridge id)kSecClassGenericPassword, (__bridge id)kSecClassInternetPassword,
+                         (__bridge id)kSecClassKey, (__bridge id)kSecClassCertificate];
+    for (id itemClass in classes) {
+        OSStatus status = [keychain deleteMatching:(__bridge CFDictionaryRef)@{(__bridge id)kSecClass: itemClass}];
+        if (status != errSecSuccess && status != errSecItemNotFound) return NO;
+    }
+    return YES;
 }
 
 __attribute__((used, section("__DATA,__interpose"))) static const struct {

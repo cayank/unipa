@@ -31,11 +31,19 @@ The instance name selects the database file. Rebuilding with the same bundle ID 
 
 Apps still generate their own identifiers. Isolating Keychain storage does not reset `identifierForVendor`, preferences, files, or server-side identity.
 
+## Switching instances
+
+Use **unipa → Keychain** to select an instance or create one with **New Instance…**. Changes apply after restarting. **Clear** deletes the active instance's records and quits the app.
+
+`--keychain-instance` sets the initial instance. Menu selections are saved in app preferences.
+
+Preferences and files remain shared, so switching Keychains may not switch every account-related value. Apps often keep device IDs and addresses in preferences, which **unipa → Reset App…** clears.
+
 ## Compatibility and security
 
-`src/hooks/keychain.m` intercepts `SecItemAdd`, `SecItemCopyMatching`, `SecItemUpdate`, and `SecItemDelete`. The SQLite backend in `src/keychain/store.m` supports generic and internet passwords, exportable software keys, and certificates, including queries, updates, duplicates, and persistent references.
+`src/hooks/keychain/interpose.m` intercepts `SecItemAdd`, `SecItemCopyMatching`, `SecItemUpdate`, and `SecItemDelete`. The SQLite backend in `src/hooks/keychain/store.m` supports generic and internet passwords, exportable software keys, and certificates, including queries, updates, duplicates, and persistent references.
 
-**Values, including passwords and exportable private keys, are stored without encryption.** Directories use `0700` and databases use `0600`. Sandbox write access is limited to the selected database and its SQLite journal files. These permissions do not protect against other software running as the same user.
+**Values, including passwords and exportable private keys, are stored without encryption.** Directories use `0700` and databases use `0600`. Sandbox access is limited to the app's own Keychain folder, so other bundle IDs' stores stay unreadable. These permissions do not protect against other software running as the same user.
 
 Accessibility attributes are stored as metadata, not enforced. User-presence controls, iCloud synchronization, nonexportable or Secure Enclave keys, identities, `kSecValueRef` queries, and unsupported options return an error. There is no fallback to another store. Use native Keychain when its security properties are needed.
 

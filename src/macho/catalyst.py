@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from entitlements import compatibility_sandbox, configure_location_access, macos_entitlements
 from reader import MachO, MachOError
-from load_commands import add_dylibs, build_platform, commands, dylib_names
+from load_commands import add_dylibs, build_platform, build_version, commands, dylib_names
 from bundle import app_filename, apply_bundle_settings, bundle_settings
 from keychain import keychain_configuration, prepare_keychain_directory
 
@@ -23,17 +23,37 @@ MAC_CATALYST = 6
 SWIFT_UIKIT = "@rpath/libswiftUIKit.dylib"
 CATALYST_SWIFT_UIKIT = "/System/iOSSupport/usr/lib/swift/libswiftUIKit.dylib"
 RUNTIME_LIBRARY = "@executable_path/Frameworks/UnipaRuntime.dylib"
+RUNTIME_HOOKS = [
+    "environment.m",
+    "layout/layout.m",
+    "layout/screen.m",
+    "window/geometry.m",
+    "window/style.m",
+    "window/presentation.m",
+    "window/tabs.m",
+    "location/location.m",
+    "device/info.m",
+    "data/reset.m",
+    "keychain/instances.m",
+    "menu/menu.m",
+]
+# Compiled only for isolated Keychain storage, since it replaces the SecItem functions.
+KEYCHAIN_HOOKS = ["keychain/interpose.m", "keychain/store.m"]
 WINDOW_GEOMETRY = {
     "width": 390,
     "height": 844,
-    "resizable": True,
+    "resizable": False,
     "lock_aspect_ratio": True,
 }
+IPAD_LAYOUT = {"width": 820, "height": 1180}
+# UIKit enables newer behavior, such as the iPadOS 18 tab bar, only for apps built with a newer SDK.
+MINIMUM_CATALYST_SDK = (14, 0)
 
 @dataclass(frozen=True)
 class Binary:
     relative: Path
     platform: int
+    sdk: str
     fix_swift_uikit: bool
 
 def inspect_binary(path: Path, app: Path) -> Binary:
@@ -46,14 +66,32 @@ def inspect_binary(path: Path, app: Path) -> Binary:
         raise MachOError(f"Decrypt the binary before macOS conversion: {path}")
 
     try:
-        platform = build_platform(binary)
+        platform, sdk = build_version(binary)
         libraries = dylib_names(binary)
     except MachOError as error:
         raise MachOError(f"{path}: {error}") from error
 
     if platform not in (MACOS, IOS, MAC_CATALYST):
         raise MachOError(f"Unsupported build platform {platform}: {path}")
-    return Binary(path.relative_to(app), platform, SWIFT_UIKIT in libraries)
+    return Binary(path.relative_to(app), platform, sdk, SWIFT_UIKIT in libraries)
+
+def catalyst_sdk(sdk: str) -> str:
+    """Keep the binary's iOS SDK, which Mac Catalyst versions share, but never below the supported minimum"""
+    version = tuple(int(part) for part in sdk.split("."))
+    return sdk if version >= MINIMUM_CATALYST_SDK else ".".join(map(str, MINIMUM_CATALYST_SDK))
+
+def unipa_version() -> str:
+    package = Path(__file__).resolve().parents[2] / "package.json"
+    return json.loads(package.read_text())["version"]
+
+def window_geometry(info: dict) -> dict:
+    families = info.get("UIDeviceFamily", [1])
+    if not isinstance(families, list):
+        families = [families]
+    geometry = dict(WINDOW_GEOMETRY)
+    if any(str(family) == "2" for family in families):
+        geometry["ipad"] = dict(IPAD_LAYOUT)
+    return geometry
 
 def run_tool(*arguments: str) -> str:
     result = subprocess.run(arguments, check=False, capture_output=True, text=True)
@@ -94,7 +132,6 @@ def check_runtime(inspection: dict, libraries: list[str] | None = None) -> dict:
         raise MachOError("UnipaRuntime.dylib is reserved for the Mac runtime")
 
     binary = MachO(Path(inspection["executable"]).read_bytes())
-    # vtool replaces the legacy iOS version command with a 24-byte LC_BUILD_VERSION.
     growth = sum(
         max(0, 24 - size)
         for command, _, size in commands(binary)
@@ -111,12 +148,8 @@ def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = Fal
     if library.exists():
         raise MachOError(f"Runtime helper already exists: {library}")
 
-    keychain_sources = []
-    if isolated_keychain:
-        keychain_sources = [
-            "-framework", "Security", "-lsqlite3",
-            str(hooks / "keychain.m"), str(hooks.parent / "keychain/store.m"),
-        ]
+    sources = RUNTIME_HOOKS + (KEYCHAIN_HOOKS if isolated_keychain else [])
+    keychain_libraries = ["-lsqlite3"] if isolated_keychain else []
 
     run_tool(
         "/usr/bin/xcrun",
@@ -132,11 +165,13 @@ def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = Fal
         "AppKit",
         "-framework",
         "Foundation",
+        "-framework",
+        "Security",
         "-Wl,-install_name," + RUNTIME_LIBRARY,
-        str(hooks / "window-geometry.m"),
-        str(hooks / "display-geometry.m"),
-        str(hooks / "runtime-environment.m"),
-        *keychain_sources,
+        "-I",
+        str(hooks),
+        *keychain_libraries,
+        *(str(hooks / source) for source in sources),
         "-o",
         str(library),
     )
@@ -205,10 +240,6 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
             "working_directory": "/",
             "library": "Frameworks/UnipaRuntime.dylib",
         },
-        "window_geometry": {
-            **WINDOW_GEOMETRY,
-            "library": "Frameworks/UnipaRuntime.dylib",
-        },
     }
     write_json(report_path, report)
 
@@ -225,7 +256,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
         for binary in binaries:
             path = pending / binary.relative
             if binary.platform == IOS:
-                run_tool(vtool, "-set-build-version", "maccatalyst", "11.0", "14.0", "-replace", "-output", str(path), str(path))
+                run_tool(vtool, "-set-build-version", "maccatalyst", "11.0", catalyst_sdk(binary.sdk), "-replace", "-output", str(path), str(path))
 
             if binary.fix_swift_uikit:
                 run_tool(install_name_tool, "-change", SWIFT_UIKIT, CATALYST_SWIFT_UIKIT, str(path))
@@ -240,25 +271,30 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
 
             converted = inspect_binary(path, pending)
             expected = MAC_CATALYST if binary.platform == IOS else binary.platform
-            if converted.platform != expected or converted.fix_swift_uikit:
+            expected_sdk = catalyst_sdk(binary.sdk) if binary.platform == IOS else binary.sdk
+            if converted.platform != expected or converted.sdk != expected_sdk or converted.fix_swift_uikit:
                 raise MachOError(f"macOS conversion verification failed: {path}")
 
             report_binary = {
                 "binary": str(binary.relative),
                 "original_platform": binary.platform,
                 "platform": converted.platform,
+                "sdk": converted.sdk,
                 "swift_uikit_fixed": binary.fix_swift_uikit,
             }
             report["binaries"].append(report_binary)
             
         info_path = pending / "Info.plist"
         info = plistlib.loads(info_path.read_bytes())
+        geometry = window_geometry(info)
+        report["window_geometry"] = {**geometry, "library": "Frameworks/UnipaRuntime.dylib"}
         info.update(
             {
                 "MinimumOSVersion": "11.0",
                 "LSMinimumSystemVersion": "11.0",
-                "UIDeviceFamily": [1],
-                "UnipaDisplay": WINDOW_GEOMETRY.copy(),
+                "UIDeviceFamily": [1, 2] if "ipad" in geometry else [1],
+                "UnipaDisplay": geometry,
+                "UnipaVersion": unipa_version(),
                 "UISupportedInterfaceOrientations": ["UIInterfaceOrientationPortrait"],
             }
         )
@@ -274,7 +310,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
         if keychain:
             prepare_keychain_directory(keychain)
         entitlements.write_bytes(plistlib.dumps(macos_entitlements(
-            Path(keychain["database"]) if keychain else None, location=location_access, incoming_network=incoming_network
+            Path(keychain["directory"]) if keychain else None, location=location_access, incoming_network=incoming_network
         )))
         entitlements.chmod(0o600)
         report["compatibility_sandbox"] = compatibility_sandbox()
@@ -286,6 +322,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
             "binary": str(helper.relative),
             "original_platform": None,
             "platform": helper.platform,
+            "sdk": helper.sdk,
             "swift_uikit_fixed": False
         }
         report["binaries"].append(report_binary)

@@ -6,6 +6,7 @@ type CatalystBinary = {
   binary: string;
   original_platform: number | null;
   platform: number;
+  sdk: string;
   swift_uikit_fixed: boolean;
 };
 
@@ -40,6 +41,7 @@ export type CatalystConversion = {
     height: number;
     resizable: boolean;
     lock_aspect_ratio: boolean;
+    ipad?: { width: number; height: number };
     library: string;
   };
 };

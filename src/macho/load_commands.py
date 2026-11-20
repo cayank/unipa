@@ -13,27 +13,34 @@ def commands(binary: MachO):
         yield command, offset, size
         offset += size
 
-def build_platform(binary: MachO) -> int:
-    platforms = []
+def build_version(binary: MachO) -> tuple[int, str]:
+    """Return the build platform and the SDK version, formatted like 26.2"""
+    versions = []
     for command, offset, size in commands(binary):
         if command == 0x32:
             if size < 24:
                 raise MachOError("Truncated LC_BUILD_VERSION")
             
-            platform, _, _, tools = struct.unpack_from("<4I", binary.data, offset + 8)
+            platform, _, sdk, tools = struct.unpack_from("<4I", binary.data, offset + 8)
             if 24 + tools * 8 > size:
                 raise MachOError("Truncated build tool table")
             
-            platforms.append(platform)
+            versions.append((platform, sdk))
         elif command in VERSION_COMMANDS:
             if size < 16:
                 raise MachOError("Truncated minimum OS command")
             
-            platforms.append(VERSION_COMMANDS[command])
-    if len(platforms) != 1:
+            _, sdk = struct.unpack_from("<2I", binary.data, offset + 8)
+            versions.append((VERSION_COMMANDS[command], sdk))
+    if len(versions) != 1:
         raise MachOError("Expected one Mach-O build platform")
     
-    return platforms[0]
+    platform, sdk = versions[0]
+    # Versions are packed as xxxx.yy.zz
+    return platform, f"{sdk >> 16}.{(sdk >> 8) & 0xFF}"
+
+def build_platform(binary: MachO) -> int:
+    return build_version(binary)[0]
 
 def dylib_names(binary: MachO) -> set[str]:
     names = set()
