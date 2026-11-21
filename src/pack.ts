@@ -1,5 +1,6 @@
 import path from "node:path";
-import { lstat, rename, rm } from "node:fs/promises";
+import { lstat, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { runMachO, type BundleInspection } from "./macho/run";
 import { log } from "./logger";
 import { execute } from "./process";
@@ -7,6 +8,26 @@ import type { InjectedLibrary } from "./inject";
 import { outputFilename } from "./filenames";
 
 const MAC_CATALYST = 6;
+
+async function allowIncomingConnections(app: string, identity: string): Promise<void> {
+  const entitlements = await execute(["/usr/bin/codesign", "-d", "--entitlements", ":-", app]);
+  if (!entitlements.trim()) return;
+
+  const directory = await mkdtemp(path.join(tmpdir(), "unipa-sign-"));
+  try {
+    const file = path.join(directory, "entitlements.plist");
+    await writeFile(file, entitlements, { mode: 0o600 });
+    const profile = JSON.parse(await execute(["/usr/bin/plutil", "-convert", "json", "-o", "-", file]));
+    if (profile["com.apple.security.app-sandbox"] !== true || profile["com.apple.security.network.server"] === true) return;
+
+    profile["com.apple.security.network.server"] = true;
+    await writeFile(file, JSON.stringify(profile));
+    await execute(["/usr/bin/plutil", "-convert", "xml1", file]);
+    await execute(["/usr/bin/codesign", "--force", "--sign", identity, "--entitlements", file, app]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
 
 async function signBundle(app: string, identity: string, injections: InjectedLibrary[], preserveEntitlements: boolean): Promise<void> {
   log.info(`Signing (${identity === "-" ? "ad-hoc" : identity})…`);
@@ -17,6 +38,7 @@ async function signBundle(app: string, identity: string, injections: InjectedLib
   }
   const preserve = preserveEntitlements ? ["--preserve-metadata=entitlements"] : [];
   await execute(["/usr/bin/codesign", "--force", "--deep", ...preserve, "--sign", identity, app]);
+  if (preserveEntitlements && injections.length) await allowIncomingConnections(app, identity);
   await execute(["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", app]);
   log.success("Signature verified");
 }

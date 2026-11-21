@@ -31,7 +31,7 @@ unipa --app /Applications/Example.app --inject ./dylibs/unipa-flex.dylib --macos
 
 The IPA keeps the iOS library. The Mac copy retags it during [Mac Catalyst conversion](catalyst.md). Libraries must be thin arm64 after architecture selection. Platform retagging does not guarantee compatibility with macOS, so check the library's runtime and signing requirements.
 
-With `--macos --inject`, the Mac sandbox allows incoming connections. The library controls its listening address and port. Reports record this permission as `incoming_network`.
+Injecting into a sandboxed Mac app enables incoming connections, including direct Catalyst injection. The library controls its listening address and port. Mac conversion records this permission as `incoming_network`.
 
 ## Building FLEX
 
