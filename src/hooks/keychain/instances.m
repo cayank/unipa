@@ -10,7 +10,7 @@ static BOOL validBundleIdentifier(id value) {
     return ![value hasPrefix:@"."] && [value rangeOfCharacterFromSet:allowed.invertedSet].location == NSNotFound;
 }
 
-// Matches --keychain-instance after lowercasing: 1–64 letters, digits, dots, underscores, or hyphens.
+// Matches the converter's instance names after lowercasing: 1–64 letters, digits, dots, underscores, or hyphens.
 BOOL unipaValidKeychainInstance(NSString *name) {
     if (![name isKindOfClass:NSString.class]) return NO;
     return [[NSPredicate predicateWithFormat:@"SELF MATCHES %@", @"[a-z0-9][a-z0-9._-]{0,63}"] evaluateWithObject:name];

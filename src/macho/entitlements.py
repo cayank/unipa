@@ -85,7 +85,6 @@ def macos_entitlements(keychain_directory: Path | None = None, *, location: bool
         entitlements["com.apple.security.personal-information.location"] = True
 
     if keychain_directory is not None:
-        # The app's instances share this folder, so the unipa menu can switch between them.
         relative = keychain_directory.relative_to(Path.home())
         entitlements["com.apple.security.temporary-exception.files.home-relative-path.read-write"] = [f"/{relative}/"]
     return entitlements

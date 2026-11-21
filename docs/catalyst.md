@@ -18,11 +18,11 @@ The Mac app filename uses the source app's display name, falling back to its bun
 
 `--bundle-id` and `--bundle-name` are shared with IPA output. See [bundle settings](bundle.md) for random and exact values, naming, nested IDs, and signing implications.
 
-Entitlements are replaced with a sandbox profile that allows outgoing network connections and declared location access. With `--inject`, the Mac app also receives incoming-network permission. Optional isolated Keychain storage adds access to the app's Keychain folder. Original entitlements are dropped, so push notifications, App Groups, and other provisioned features may need additional configuration.
+Entitlements are replaced with a sandbox profile that allows outgoing network connections and declared location access. With `--inject`, the Mac app also receives incoming-network permission. Isolated Keychain storage adds access to the app's Keychain folder. Original entitlements are dropped, so push notifications, App Groups, and other provisioned features may need additional configuration.
 
-## Optional Keychain storage
+## Keychain storage
 
-`--isolated-keychain` uses independent storage for the generated Mac app. `--keychain-instance <name>` selects another persistent instance and enables isolation. Native Keychain remains the default, and the IPA is unaffected. See [isolated Keychain storage](keychain.md) for details and security limits.
+The generated Mac app uses independent Keychain storage by default. `--native-keychain` uses the system Keychain instead. The IPA is unaffected. See [isolated Keychain storage](keychain.md) for details and security limits.
 
 ## Compatibility sandbox
 

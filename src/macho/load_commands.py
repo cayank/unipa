@@ -14,7 +14,6 @@ def commands(binary: MachO):
         offset += size
 
 def build_version(binary: MachO) -> tuple[int, str]:
-    """Return the build platform and the SDK version, formatted like 26.2"""
     versions = []
     for command, offset, size in commands(binary):
         if command == 0x32:
@@ -34,9 +33,9 @@ def build_version(binary: MachO) -> tuple[int, str]:
             versions.append((VERSION_COMMANDS[command], sdk))
     if len(versions) != 1:
         raise MachOError("Expected one Mach-O build platform")
-    
+
+    # versions are packed as xxxx.yy.zz
     platform, sdk = versions[0]
-    # Versions are packed as xxxx.yy.zz
     return platform, f"{sdk >> 16}.{(sdk >> 8) & 0xFF}"
 
 def build_platform(binary: MachO) -> int:
@@ -94,6 +93,7 @@ def add_dylibs(data: bytes, names: list[str], *, reserved_bytes: int = 0) -> byt
         
         if name in existing:
             raise MachOError(f"Dylib is already loaded: {name}")
+
         existing.add(name)
         encoded = name.encode("utf-8") + b"\0"
         size = (24 + len(encoded) + 7) // 8 * 8

@@ -48,8 +48,7 @@ Options:
   --identity <name>           codesign identity (default: ad-hoc)
   --bundle-id [id]            Set the output bundle ID (random generates a suffix)
   --bundle-name [name]        Set the output app name (random generates a suffix)
-  --isolated-keychain         Use independent Keychain storage for --macos output
-  --keychain-instance <name>  Select <name>.db (default: default.db)
+  --native-keychain           Use the system Keychain for --macos output (default: isolated storage)
   --macos                     Also build a standalone Mac Catalyst .app (experimental)
   --no-sign                   Skip signing (patching invalidates the original signature)
   --version                   Show version
@@ -93,8 +92,7 @@ function parseOptions() {
       macos: { type: "boolean" },
       "bundle-id": { type: "string" },
       "bundle-name": { type: "string" },
-      "isolated-keychain": { type: "boolean" },
-      "keychain-instance": { type: "string" },
+      "native-keychain": { type: "boolean" },
       version: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
@@ -129,13 +127,8 @@ function parseOptions() {
     throw new Error("--bundle-name must be an app name without path separators or control characters");
   }
 
-  const isolatedKeychain = values["isolated-keychain"] || values["keychain-instance"] !== undefined;
-  if (isolatedKeychain && !values.macos) throw new Error("Isolated Keychain requires --macos");
-
-  const keychainInstance = isolatedKeychain ? (values["keychain-instance"] ?? "default") : undefined;
-  if (keychainInstance !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(keychainInstance)) {
-    throw new Error("--keychain-instance must be 1–64 letters, digits, dots, underscores, or hyphens, starting with a letter or digit");
-  }
+  if (values["native-keychain"] && !values.macos) throw new Error("--native-keychain requires --macos");
+  const keychainInstance = values.macos && !values["native-keychain"] ? "default" : undefined;
 
   return {
     keychainInstance,

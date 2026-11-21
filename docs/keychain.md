@@ -1,18 +1,10 @@
 # Isolated Keychain storage
 
-Apps use Keychain storage for credentials, tokens, keys, and persistent identifiers. Native Keychain remains the default. To use unipa's local store in a generated Mac app:
+Apps use Keychain storage for credentials, tokens, keys, and persistent identifiers. unipa's local store is the default for the generated Mac app. To use the system Keychain instead:
 
 ```bash
-unipa --app /Applications/Example.app --macos --isolated-keychain
+unipa --app /Applications/Example.app --macos --native-keychain
 ```
-
-To select another persistent instance:
-
-```bash
-unipa --app /Applications/Example.app --macos --keychain-instance second
-```
-
-`--keychain-instance` enables isolated storage and requires `--macos`. Names use 1–64 letters, digits, dots, underscores, or hyphens and must start with a letter or digit. Bundle IDs and instance names are normalized to lowercase.
 
 ## Storage and identity
 
@@ -27,7 +19,7 @@ The instance name selects the database file. Rebuilding with the same bundle ID 
 
 `--bundle-id` changes the storage namespace. `--bundle-id random` creates a new one each run. Renaming the app has no effect.
 
-`--keychain-instance` separates Keychain databases only. Copies with the same bundle ID share macOS app identity and may share other app data. Use [`--bundle-id`](bundle.md) for a separate identity.
+Instances separate Keychain databases only. Copies with the same bundle ID share macOS app identity and may share other app data. Use [`--bundle-id`](bundle.md) for a separate identity.
 
 Apps still generate their own identifiers. Isolating Keychain storage does not reset `identifierForVendor`, preferences, files, or server-side identity.
 
@@ -35,7 +27,7 @@ Apps still generate their own identifiers. Isolating Keychain storage does not r
 
 Use **unipa → Keychain** to select an instance or create one with **New Instance…**. Changes apply after restarting. **Clear** deletes the active instance's records and quits the app.
 
-`--keychain-instance` sets the initial instance. Menu selections are saved in app preferences.
+Apps start with the `default` instance. Menu selections are saved in app preferences.
 
 Preferences and files remain shared, so switching Keychains may not switch every account-related value. Apps often keep device IDs and addresses in preferences, which **unipa → Reset App…** clears.
 

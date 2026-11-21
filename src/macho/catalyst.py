@@ -37,7 +37,7 @@ RUNTIME_HOOKS = [
     "keychain/instances.m",
     "menu/menu.m",
 ]
-# Compiled only for isolated Keychain storage, since it replaces the SecItem functions.
+
 KEYCHAIN_HOOKS = ["keychain/interpose.m", "keychain/store.m"]
 WINDOW_GEOMETRY = {
     "width": 390,
@@ -46,7 +46,6 @@ WINDOW_GEOMETRY = {
     "lock_aspect_ratio": True,
 }
 IPAD_LAYOUT = {"width": 820, "height": 1180}
-# UIKit enables newer behavior, such as the iPadOS 18 tab bar, only for apps built with a newer SDK.
 MINIMUM_CATALYST_SDK = (14, 0)
 
 @dataclass(frozen=True)
@@ -206,7 +205,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
         for item in inspection["binaries"]:
             libraries = dylib_names(MachO(Path(item).read_bytes()))
             if Path(item).name == "PlayTools" or any("PlayTools.framework/" in name for name in libraries):
-                raise MachOError("Isolated Keychain cannot be combined with PlayTools; use the original decrypted app")
+                raise MachOError("Isolated Keychain cannot be combined with PlayTools; use the original decrypted app or --native-keychain")
 
     binaries = [inspect_binary(Path(item), source) for item in inspection["binaries"]]
     main_relative = Path(inspection["executable"]).relative_to(source)
