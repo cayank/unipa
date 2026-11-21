@@ -1,6 +1,8 @@
 # Dylib injection
 
-`--inject` adds local iOS dylibs to the output app after recovery and before signing. With `--macos`, they are included in the Mac copy too. Source files stay unchanged.
+`--inject` adds local dylibs to the output app after recovery and before signing. An iOS dylib injected into a Mac Catalyst app is retagged to Mac Catalyst so it loads. With `--macos`, injected dylibs are included in the Mac copy too. Source files stay unchanged.
+
+Injecting into an already-converted Mac Catalyst app produces a runnable `.app` in the run folder instead of an IPA, since a Catalyst app runs on the Mac directly rather than being installed.
 
 ```bash
 unipa \
@@ -13,7 +15,7 @@ unipa \
 
 The `dylibs/` directory at the project root is ignored by Git. Use it for downloaded libraries, or supply any other local path. The `src/hooks/` directory contains unipa's own hook source files.
 
-Inputs can be `.dylib`, `.dylib.gz`, or `.dylib.xz`. Universal libraries are reduced to a compatible slice, preferring an exact CPU subtype match. Libraries must be decrypted and target iOS devices. Simulator, macOS, incompatible, and ambiguous inputs are rejected.
+Inputs can be `.dylib`, `.dylib.gz`, or `.dylib.xz`. Universal libraries are reduced to a compatible slice, preferring an exact CPU subtype match. Libraries must be decrypted. iOS apps require iOS device libraries. Catalyst apps accept iOS device or Catalyst libraries. Simulator, macOS, incompatible, and ambiguous inputs are rejected.
 
 Libraries are checked and staged before dumping. Injection stops if header space is insufficient or a destination filename conflicts. With `--macos`, these checks also cover `UnipaRuntime.dylib`.
 

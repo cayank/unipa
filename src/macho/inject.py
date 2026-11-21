@@ -1,4 +1,4 @@
-"""Prepare local dylibs and embed them into a recovered iOS app"""
+"""Prepare local dylibs and embed them into a recovered iOS or Mac Catalyst app"""
 
 from __future__ import annotations
 
@@ -8,16 +8,38 @@ import json
 import lzma
 import os
 import stat
+import subprocess
 import tempfile
 from pathlib import Path
 from universal import architecture_score, select_slice
 from artifacts import write_json, write_new
-from load_commands import add_dylibs, build_platform
+from load_commands import add_dylibs, build_platform, build_version
 from reader import MH_DYLIB, MH_EXECUTE, MachO, MachOError, digest
 
 IOS = 2
+MAC_CATALYST = 6
+TARGET_PLATFORMS = (IOS, MAC_CATALYST)
 MAX_LIBRARY_BYTES = 256 * 1024 * 1024
 SCHEMA = "unipa-injection-v1"
+
+def retag_catalyst(data: bytes) -> bytes:
+    _, sdk = build_version(MachO(data))
+    version = tuple(int(part) for part in sdk.split("."))
+    sdk = sdk if version >= (14, 0) else "14.0"
+    descriptor, path = tempfile.mkstemp(suffix=".dylib")
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+        result = subprocess.run(
+            ["/usr/bin/xcrun", "vtool", "-set-build-version", "maccatalyst", "11.0", sdk, "-replace", "-output", path, path],
+            capture_output=True, text=True,
+        )
+        if result.returncode:
+            raise MachOError(f"Could not retag the dylib for Mac Catalyst: {result.stderr.strip()}")
+        return Path(path).read_bytes()
+    finally:
+        Path(path).unlink(missing_ok=True)
+
 def bounded_read(handle) -> bytes:
     data = handle.read(MAX_LIBRARY_BYTES + 1)
     if len(data) > MAX_LIBRARY_BYTES:
@@ -35,6 +57,7 @@ def read_library(source: Path, target: MachO) -> tuple[str, bytes, dict, bytes |
         original = bounded_read(handle)
     data = original
     name = input_path.name
+
     try:
         if name.lower().endswith(".gz"):
             name = name[:-3]
@@ -52,17 +75,24 @@ def read_library(source: Path, target: MachO) -> tuple[str, bytes, dict, bytes |
     
     data, thinned = select_slice(data, target)
     binary = MachO(data)
+
     if binary.filetype != MH_DYLIB:
         raise MachOError(f"Not a Mach-O dynamic library: {source}")
     
     if binary.encryption and binary.encryption.cryptid:
         raise MachOError(f"Injected dylib must already be decrypted: {source}")
-    
-    if build_platform(binary) != IOS:
-        raise MachOError(f"Injected dylib must target iOS devices: {source}")
+
+    host_platform = build_platform(target)
+    if host_platform == MAC_CATALYST and build_platform(binary) == IOS:
+        data = retag_catalyst(data)
+        binary = MachO(data)
+    if build_platform(binary) != host_platform:
+        target_name = "Mac Catalyst" if host_platform == MAC_CATALYST else "iOS devices"
+        raise MachOError(f"Injected dylib must target {target_name}: {source}")
 
     config_path = input_path.with_name(name[:-6] + ".config")
     config = None
+
     if config_path.exists():
         if not config_path.is_file():
             raise MachOError(f"Dylib config must be a regular file: {config_path}")
@@ -88,11 +118,13 @@ def check_destinations(app: Path, libraries: list[dict]) -> None:
     frameworks = app / "Frameworks"
     if frameworks.is_symlink() or (frameworks.exists() and not frameworks.is_dir()):
         raise MachOError("Frameworks must be a directory, not a symlink or file")
+
     names = (
         {entry.name.casefold() for entry in frameworks.iterdir()}
         if frameworks.exists()
         else set()
     )
+
     for library in libraries:
         for relative in (library["binary"], library["config"]):
             if relative is None:
@@ -115,8 +147,8 @@ def prepare_injection(info: dict, sources: list[Path], output_dir: Path) -> dict
     target_data = Path(info["executable"]).read_bytes()
     target = MachO(target_data)
 
-    if target.filetype != MH_EXECUTE or build_platform(target) != IOS:
-        raise MachOError("--inject requires an iOS device executable")
+    if target.filetype != MH_EXECUTE or build_platform(target) not in TARGET_PLATFORMS:
+        raise MachOError("--inject requires an iOS or Mac Catalyst executable")
     
     if not sources:
         raise MachOError("No dylibs supplied for injection")
@@ -165,7 +197,8 @@ def apply_injection(info: dict, prepared_dir: Path) -> dict:
     if target.encryption and target.encryption.cryptid:
         raise MachOError("Recover the executable before injecting dylibs")
     
-    if (target.cpu, target.subtype) != (plan["cpu"], plan["subtype"]) or build_platform(target) != IOS:
+    host_platform = build_platform(target)
+    if (target.cpu, target.subtype) != (plan["cpu"], plan["subtype"]) or host_platform not in TARGET_PLATFORMS:
         raise MachOError("Prepared injection does not match the output app")
     
     libraries = plan["libraries"]
@@ -199,7 +232,7 @@ def apply_injection(info: dict, prepared_dir: Path) -> dict:
         binary = MachO(files[library["binary"]])
         if (
             binary.filetype != MH_DYLIB
-            or build_platform(binary) != IOS
+            or build_platform(binary) != host_platform
             or not architecture_score(binary.cpu, binary.subtype, target)
             or (binary.encryption and binary.encryption.cryptid)
         ):

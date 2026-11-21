@@ -87,7 +87,7 @@ It needs the Xcode Command Line Tools (`xcode-select --install`) and cannot be c
 
 ### Dylib injection
 
-Use `--inject` to embed a local iOS dylib into the output app. Repeat the flag for multiple libraries. Compressed `.dylib.gz` and `.dylib.xz` files are also accepted.
+Use `--inject` to embed a local dylib into the output app. Repeat the flag for multiple libraries. Compressed `.dylib.gz` and `.dylib.xz` files are also accepted.
 
 ```bash
 unipa --app /Applications/Example.app --inject ./dylibs/unipa-flex.dylib

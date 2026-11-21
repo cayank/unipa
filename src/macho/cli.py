@@ -12,6 +12,7 @@ from universal import read_binary, thin_bundle
 from artifacts import write_json, write_new
 from bundle import configure_bundle
 from catalyst import check_runtime, convert_bundle
+from load_commands import build_platform
 from inject import apply_injection, prepare_injection
 from reader import (
     FAT_MAGICS,
@@ -114,7 +115,11 @@ def inspect_bundle(app: Path, excluded_extensions: list[str] | None = None) -> d
             except MachOError as error:
                 raise MachOError(f"{item}: {error}") from error
 
-    return {**info, "binaries": binaries, "encrypted": encrypted, "universal": universal}
+    try:
+        platform = build_platform(main_binary)
+    except MachOError:
+        platform = 0
+    return {**info, "platform": platform, "binaries": binaries, "encrypted": encrypted, "universal": universal}
 
 def recover(
     binary_path: Path, core_path: Path, output_dir: Path, base: int | None

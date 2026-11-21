@@ -1,27 +1,45 @@
 import path from "node:path";
-import { lstat, rename } from "node:fs/promises";
+import { lstat, rename, rm } from "node:fs/promises";
 import { runMachO, type BundleInspection } from "./macho/run";
 import { log } from "./logger";
 import { execute } from "./process";
 import type { InjectedLibrary } from "./inject";
 import { outputFilename } from "./filenames";
 
+const MAC_CATALYST = 6;
+
+async function signBundle(app: string, identity: string, injections: InjectedLibrary[], preserveEntitlements: boolean): Promise<void> {
+  log.info(`Signing (${identity === "-" ? "ad-hoc" : identity})…`);
+  for (const library of injections) {
+    const binary = path.join(app, library.binary);
+    await execute(["/usr/bin/codesign", "--force", "--sign", identity, binary]);
+    await execute(["/usr/bin/codesign", "--verify", "--strict", "--verbose=2", binary]);
+  }
+  const preserve = preserveEntitlements ? ["--preserve-metadata=entitlements"] : [];
+  await execute(["/usr/bin/codesign", "--force", "--deep", ...preserve, "--sign", identity, app]);
+  await execute(["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", app]);
+  log.success("Signature verified");
+}
+
+export async function packApp(app: string, workspace: string, identity: string | undefined, injections: InjectedLibrary[] = []): Promise<string> {
+  const inspection = await runMachO<BundleInspection>("inspect-bundle", ["--app", app]);
+  if (inspection.encrypted.length) throw new Error(`Encrypted files remain before packaging: ${inspection.encrypted.join(", ")}`);
+  if (inspection.universal.length) throw new Error(`Universal binaries remain before packaging: ${inspection.universal.join(", ")}`);
+
+  if (identity !== undefined) await signBundle(app, identity, injections, true);
+
+  const output = path.join(workspace, outputFilename(inspection.name, ".app"));
+  await rm(output, { recursive: true, force: true });
+  await rename(app, output);
+  return output;
+}
+
 export async function pack(app: string, workspace: string, identity: string | undefined, injections: InjectedLibrary[] = []): Promise<string> {
   const inspection = await runMachO<BundleInspection>("inspect-bundle", ["--app", app]);
   if (inspection.encrypted.length) throw new Error(`Encrypted files remain before packaging: ${inspection.encrypted.join(", ")}`);
   if (inspection.universal.length) throw new Error(`Universal binaries remain before packaging: ${inspection.universal.join(", ")}`);
 
-  if (identity !== undefined) {
-    log.info(`Signing (${identity === "-" ? "ad-hoc" : identity})…`);
-    for (const library of injections) {
-      const binary = path.join(app, library.binary);
-      await execute(["/usr/bin/codesign", "--force", "--sign", identity, binary]);
-      await execute(["/usr/bin/codesign", "--verify", "--strict", "--verbose=2", binary]);
-    }
-    await execute(["/usr/bin/codesign", "--force", "--deep", "--sign", identity, app]);
-    await execute(["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", app]);
-    log.success("Signature verified");
-  }
+  if (identity !== undefined) await signBundle(app, identity, injections, inspection.platform === MAC_CATALYST);
 
   // ditto includes payload itself and retains symlinks and executable modes
   const pending = path.join(workspace, "archive.pending.zip");

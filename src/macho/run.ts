@@ -22,6 +22,7 @@ export type Bundle = {
 };
 
 export type BundleInspection = Bundle & {
+  platform: number;
   binaries: string[];
   encrypted: string[];
   universal: string[];

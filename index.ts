@@ -6,6 +6,7 @@ import { version } from "./package.json";
 import {
   log,
   pack,
+  packApp,
   resolveApp,
   selectApp,
   dumpCore,
@@ -43,7 +44,7 @@ Options:
   --core-for <path=core>      Core for another binary in the bundle (repeatable)
   --keep-extensions           Keep PlugIns/*.appex (default: removed from the output)
   --exclude-extension <name>  Remove one extension, e.g. Name.appex (repeatable)
-  --inject <file>             Embed a local iOS dylib (repeatable; .gz and .xz supported)
+  --inject <file>             Embed a local dylib (repeatable; .gz and .xz supported)
   --identity <name>           codesign identity (default: ad-hoc)
   --bundle-id [id]            Set the output bundle ID (random generates a suffix)
   --bundle-name [name]        Set the output app name (random generates a suffix)
@@ -378,13 +379,19 @@ async function main() {
 
   const identity = options.identity;
   const injections = injection ? await injectLibraries(app, injection) : [];
+
   for (const library of injections) {
     log.success(`Injected ${library.binary}`);
   }
-  const ipa = await pack(app, workspace, identity, injections);
+
+  const catalystSource = sourceInspection.platform === 6;
+  const ipa = catalystSource ? null : await pack(app, workspace, identity, injections);
+  const patchedApp = catalystSource ? await packApp(app, workspace, identity, injections) : null;
+
   let macos = null;
   if (options.macos) {
     log.info("Converting a separate copy to Mac Catalyst…");
+
     macos = await createCatalystApp(
       app,
       path.join(workspace, "macos"),
@@ -393,7 +400,9 @@ async function main() {
       { id: options.bundleId !== undefined ? bundle!.bundle_id : undefined },
       injections.length > 0,
     );
+
     log.info(`Mac app: ${macos.name} (${macos.bundle_id})`);
+
     const count = macos.binaries.length;
     const label = count === 1 ? "binary" : "binaries";
     log.success(`Prepared and signed ${count} ${label}`);
@@ -418,6 +427,7 @@ async function main() {
     bundle,
     identity: identity ?? null,
     ipa,
+    app: patchedApp,
     macos,
     created_at: new Date().toISOString(),
   };
@@ -438,7 +448,8 @@ async function main() {
     process.exitCode = 1;
   }
 
-  log.success(`IPA ready: ${ipa}`);
+  ipa && log.success(`IPA ready: ${ipa}`);
+  patchedApp && log.success(`Mac app ready: ${patchedApp}`);
   macos && log.success(`macOS app ready: ${macos.app}`);
 }
 
