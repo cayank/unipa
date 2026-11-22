@@ -5,6 +5,7 @@
 #import "data/reset.h"
 #import "device/info.h"
 #import "keychain/instances.h"
+#import "language/language.h"
 #import "layout/layout.h"
 #import "location/location.h"
 #import "window/geometry.h"
@@ -12,6 +13,7 @@
 
 static NSString *const menuIdentifier = @"unipa.menu";
 static NSString *const keychainInstanceAction = @"keychain.instance.";
+static NSString *const languageAction = @"language.";
 static const NSInteger menuStateOn = 1;
 static const NSUInteger menuAttributesDisabled = 1;
 static const NSUInteger menuOptionsDisplayInline = 1;
@@ -67,6 +69,23 @@ static id layoutMenu(void) {
     ]);
 }
 
+static NSString *languageTitle(NSString *code) {
+    NSLocale *locale = [NSLocale localeWithLocaleIdentifier:code];
+    NSString *name = [locale localizedStringForLocaleIdentifier:code];
+    return name.length ? [name capitalizedStringWithLocale:locale] : code;
+}
+
+static id languageMenu(void) {
+    NSArray<NSString *> *languages = unipaSupportedLanguages();
+    if (!languages.count) return nil;
+    NSString *saved = unipaSavedLanguage();
+    NSMutableArray *items = [NSMutableArray arrayWithObject:makeCommand(@"System", @"language.system", saved == nil, YES)];
+    for (NSString *code in languages) {
+        [items addObject:makeCommand(languageTitle(code), [languageAction stringByAppendingString:code], [code isEqualToString:saved], YES)];
+    }
+    return makeMenu(@"Language", @"unipa.menu.language", 0, items);
+}
+
 static id appearanceMenu(void) {
     UnipaAppearance appearance = unipaAppearance();
     return makeMenu(@"Appearance", @"unipa.menu.appearance", 0, @[
@@ -108,15 +127,17 @@ static id keychainMenu(void) {
 }
 
 static id unipaMenu(void) {
+    // The Language submenu appears only when the app ships more than its base localization.
+    NSMutableArray *display = [NSMutableArray arrayWithObjects:layoutMenu(), appearanceMenu(), nil];
+    id language = languageMenu();
+    if (language) [display addObject:language];
+    [display addObject:makeCommand(@"Keep on Top", @"window.top", unipaKeepsOnTop(), YES)];
+    [display addObject:makeCommand(@"Hide Title Bar", @"window.titlebar", unipaHidesTitleBar(), YES)];
+
     // About comes first, like an app menu; then appearance, identity and data, tools, and the reset.
     return makeMenu(@"unipa", menuIdentifier, 0, @[
         makeMenu(@"", @"unipa.menu.about", menuOptionsDisplayInline, @[makeCommand(@"About unipa", @"about", NO, YES)]),
-        makeMenu(@"", @"unipa.menu.display", menuOptionsDisplayInline, @[
-            layoutMenu(),
-            appearanceMenu(),
-            makeCommand(@"Keep on Top", @"window.top", unipaKeepsOnTop(), YES),
-            makeCommand(@"Hide Title Bar", @"window.titlebar", unipaHidesTitleBar(), YES),
-        ]),
+        makeMenu(@"", @"unipa.menu.display", menuOptionsDisplayInline, display),
         makeMenu(@"", @"unipa.menu.identity", menuOptionsDisplayInline, @[locationMenu(), keychainMenu()]),
         makeMenu(@"", @"unipa.menu.tools", menuOptionsDisplayInline, @[
             makeCommand(@"Device Info", @"data.device", NO, YES),
@@ -285,7 +306,9 @@ static void showDeviceInfo(void) {
 static void selectKeychainInstance(NSString *name) {
     if (!unipaKeychainDirectory() || !unipaValidKeychainInstance(name)) return;
     unipaSaveKeychainInstance(name);
+
     if ([name isEqualToString:unipaActiveKeychainInstance()]) return;
+    
     // The app keeps sign-ins in memory, so it reads the other Keychain only after reopening.
     NSAlert *alert = [NSAlert new];
     alert.messageText = [NSString stringWithFormat:@"Switch to the “%@” Keychain?", name];
@@ -331,8 +354,24 @@ static void showAbout(void) {
         [NSString stringWithFormat:@"Layout: %@", layoutTitle(unipaActiveLayout())],
         [NSString stringWithFormat:@"Keychain: %@", keychain ? [NSString stringWithFormat:@"Isolated (%@)", keychain] : @"Native"],
         [NSString stringWithFormat:@"Location: %@", unipaSimulatedCoordinate(&coordinate) ? coordinateText(coordinate) : @"Real"],
+        [NSString stringWithFormat:@"Language: %@", unipaSavedLanguage() ? languageTitle(unipaSavedLanguage()) : @"System"],
     ];
     showMessage([NSString stringWithFormat:@"unipa %@", info[@"UnipaVersion"] ?: @""], [lines componentsJoinedByString:@"\n"]);
+}
+
+// Foundation reads the language at launch, so a change applies the next time the app opens.
+static void selectLanguage(NSString *code) {
+    NSString *current = unipaSavedLanguage();
+    if ((code == nil && current == nil) || [code isEqualToString:current]) return;
+    if (code) unipaSaveLanguage(code);
+    else unipaUseSystemLanguage();
+
+    NSAlert *alert = [NSAlert new];
+    alert.messageText = @"Change language?";
+    alert.informativeText = [NSString stringWithFormat:@"%@ will use the new language the next time it opens.", applicationName()];
+    [alert addButtonWithTitle:@"Quit"];
+    [alert addButtonWithTitle:@"Later"];
+    if ([alert runModal] == NSAlertFirstButtonReturn) quitApplication(nil);
 }
 
 static NSDictionary<NSString *, dispatch_block_t> *menuActions(void) {
@@ -345,6 +384,7 @@ static NSDictionary<NSString *, dispatch_block_t> *menuActions(void) {
             @"appearance.system": ^{ unipaSetAppearance(UnipaAppearanceSystem); },
             @"appearance.light": ^{ unipaSetAppearance(UnipaAppearanceLight); },
             @"appearance.dark": ^{ unipaSetAppearance(UnipaAppearanceDark); },
+            @"language.system": ^{ selectLanguage(nil); },
             @"location.real": ^{ unipaUseRealLocation(); },
             @"location.current": ^{ chooseLocation(); },
             @"location.set": ^{ chooseLocation(); },
@@ -367,6 +407,7 @@ static void performCommand(__unused id application, __unused SEL selector, id co
     dispatch_block_t action = menuActions()[name];
     if (action) action();
     else if ([name hasPrefix:keychainInstanceAction]) selectKeychainInstance([name substringFromIndex:keychainInstanceAction.length]);
+    else if ([name hasPrefix:languageAction]) selectLanguage([name substringFromIndex:languageAction.length]);
     else return;
     rebuildMenu();
 }
@@ -378,6 +419,7 @@ __attribute__((constructor)) static void installMenu(void) {
         SEL build = NSSelectorFromString(@"buildMenuWithBuilder:");
         Method method = class_getInstanceMethod(application, build);
         if (!method) return;
+        
         // UIApplication passes the builder on to the app delegate, so unipa adds its menu last.
         originalBuildMenu = (void (*)(id, SEL, id))method_getImplementation(method);
         if (!class_addMethod(application, build, (IMP)buildMenu, method_getTypeEncoding(method))) {

@@ -32,6 +32,7 @@ RUNTIME_HOOKS = [
     "window/presentation.m",
     "window/tabs.m",
     "location/location.m",
+    "language/language.m",
     "device/info.m",
     "data/reset.m",
     "keychain/instances.m",
