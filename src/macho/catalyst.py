@@ -37,6 +37,7 @@ RUNTIME_HOOKS = [
     "data/reset.m",
     "keychain/instances.m",
     "menu/menu.m",
+    "flex/flex.m",
 ]
 
 BYPASS_HOOKS = ["jailbreak/jailbreak.m"]
@@ -77,7 +78,6 @@ def inspect_binary(path: Path, app: Path) -> Binary:
     return Binary(path.relative_to(app), platform, sdk, SWIFT_UIKIT in libraries)
 
 def catalyst_sdk(sdk: str) -> str:
-    """Keep the binary's iOS SDK, which Mac Catalyst versions share, but never below the supported minimum"""
     version = tuple(int(part) for part in sdk.split("."))
     return sdk if version >= MINIMUM_CATALYST_SDK else ".".join(map(str, MINIMUM_CATALYST_SDK))
 
@@ -102,6 +102,13 @@ def run_tool(*arguments: str) -> str:
         detail = result.stderr.strip() or result.stdout.strip()
         raise MachOError(f"{arguments[0]} exited with {result.returncode}: {detail}")
     return result.stdout.strip()
+
+def source_grants_incoming_network(app: Path) -> bool:
+    result = subprocess.run(
+        ["/usr/bin/codesign", "-d", "--entitlements", "-", str(app)],
+        check=False, capture_output=True, text=True,
+    )
+    return "com.apple.security.network.server" in (result.stdout + result.stderr)
 
 def write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n")
@@ -221,7 +228,19 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
             if Path(item).name == "PlayTools" or any("PlayTools.framework/" in name for name in libraries):
                 raise MachOError("Isolated Keychain cannot be combined with PlayTools; use the original decrypted app or --native-keychain")
 
-    binaries = [inspect_binary(Path(item), source) for item in inspection["binaries"]]
+    runtime_relative = Path(RUNTIME_LIBRARY.split("/", 1)[1])
+    already_converted = (source / runtime_relative).exists()
+    if already_converted and not force:
+        raise MachOError("This app is already a unipa Mac app; convert from the original iOS app, or use --force to rebuild it in place")
+
+    if already_converted and not incoming_network and source_grants_incoming_network(source):
+        incoming_network = True
+
+    binaries = [
+        inspect_binary(Path(item), source)
+        for item in inspection["binaries"]
+        if Path(item).relative_to(source) != runtime_relative
+    ]
     main_relative = Path(inspection["executable"]).relative_to(source)
     main = next(binary for binary in binaries if binary.relative == main_relative)
     if main.platform not in (IOS, MAC_CATALYST):
