@@ -32,6 +32,12 @@ Sandbox rules in `src/macho/entitlements.py` block process forking and common sh
 
 These restrictions apply only to the generated Mac app. They reduce filesystem-based false positives, but app-specific signature checks or other detection methods may still reject the converted app.
 
+## Anti-detection bypass
+
+`--bypass` adds `src/hooks/jailbreak/jailbreak.m` to the runtime. It hides jailbreak-related paths and URL schemes and makes the app bundle look read-only like iOS, so apps that refuse to run on a jailbroken device keep working. It also renames each injected dylib to a neutral `lib<hash>.dylib`, so name-based checks cannot spot it. Any matching `.config` file follows the new name.
+
+This is meant for testing apps you work on. It does not defeat server-side checks or app-specific integrity verification.
+
 ## Location access
 
 When the source app declares a nonempty location usage description, conversion enables the macOS sandbox location entitlement. Existing purpose strings are preserved. If only an iOS purpose string exists, it also supplies `NSLocationUsageDescription` for macOS. Apps without a declared purpose receive no location entitlement.

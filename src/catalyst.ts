@@ -72,10 +72,12 @@ export const createCatalystApp = async (
   bundle: { id?: string; name?: string } = {},
   incomingNetwork = false,
   force = false,
+  bypass = false,
 ): Promise<CatalystConversion> => {
   const args = ["--app", app, "--output-dir", outputDir, "--identity", identity];
   if (incomingNetwork) args.push("--incoming-network");
   if (force) args.push("--force");
+  if (bypass) args.push("--bypass");
   if (keychainInstance !== undefined) {
     args.push("--keychain-instance", keychainInstance);
   }

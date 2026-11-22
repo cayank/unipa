@@ -39,6 +39,7 @@ RUNTIME_HOOKS = [
     "menu/menu.m",
 ]
 
+BYPASS_HOOKS = ["jailbreak/jailbreak.m"]
 KEYCHAIN_HOOKS = ["keychain/interpose.m", "keychain/store.m"]
 WINDOW_GEOMETRY = {
     "width": 390,
@@ -147,7 +148,7 @@ def check_runtime(inspection: dict, libraries: list[str] | None = None, force: b
         add_dylibs(binary.data, pending, reserved_bytes=growth)
     return {"runtime_library": RUNTIME_LIBRARY}
 
-def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = False, force: bool = False) -> Binary:
+def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = False, force: bool = False, bypass: bool = False) -> Binary:
     sdk = Path(run_tool("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"))
     hooks = Path(__file__).resolve().parents[1] / "hooks"
     library = app / "Frameworks" / "UnipaRuntime.dylib"
@@ -157,7 +158,7 @@ def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = Fal
             raise MachOError(f"Runtime helper already exists: {library}")
         library.unlink()
 
-    sources = RUNTIME_HOOKS + (KEYCHAIN_HOOKS if isolated_keychain else [])
+    sources = RUNTIME_HOOKS + (KEYCHAIN_HOOKS if isolated_keychain else []) + (BYPASS_HOOKS if bypass else [])
     keychain_libraries = ["-lsqlite3"] if isolated_keychain else []
 
     run_tool(
@@ -192,7 +193,7 @@ def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = Fal
     return inspect_binary(library, app)
 
 def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_instance: str | None = None,
-                   bundle_id_override: str | None = None, bundle_name: str | None = None, *, incoming_network: bool = False, force: bool = False) -> dict:
+                   bundle_id_override: str | None = None, bundle_name: str | None = None, *, incoming_network: bool = False, force: bool = False, bypass: bool = False) -> dict:
     source = Path(inspection["path"])
     output_dir = output_dir.resolve()
     if output_dir.is_relative_to(source):
@@ -328,7 +329,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
         report["compatibility_sandbox"] = compatibility_sandbox()
 
         executable = pending / main_relative
-        helper = add_runtime_hooks(executable, pending, keychain is not None, force=force)
+        helper = add_runtime_hooks(executable, pending, keychain is not None, force=force, bypass=bypass)
         binaries.append(helper)
         report_binary = {
             "binary": str(helper.relative),

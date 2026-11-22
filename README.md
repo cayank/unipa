@@ -83,6 +83,8 @@ The app opens in a fixed iPhone-sized window. The [unipa menu](docs/catalyst.md#
 
 Keychain storage is independent by default. Add `--native-keychain` to use the system Keychain. See [Keychain storage](docs/keychain.md) for compatibility and security limits.
 
+Add `--bypass` to hide jailbreak indicators from apps that refuse to run otherwise. See [anti-detection bypass](docs/catalyst.md#anti-detection-bypass).
+
 It needs the Xcode Command Line Tools (`xcode-select --install`) and cannot be combined with `--no-sign` or `--keep-extensions`. See [macOS conversion](docs/catalyst.md) for details and known limits.
 
 ### Dylib injection

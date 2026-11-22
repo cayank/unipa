@@ -184,11 +184,13 @@ def parse_args() -> argparse.Namespace:
     macos.add_argument("--bundle-id", nargs="?", const="")
     macos.add_argument("--bundle-name", nargs="?", const="")
     macos.add_argument("--force", action="store_true")
+    macos.add_argument("--bypass", action="store_true")
 
     prepare = commands.add_parser("prepare-injection")
     prepare.add_argument("--app", type=Path, required=True)
     prepare.add_argument("--dylib", type=Path, action="append", required=True)
     prepare.add_argument("--output-dir", type=Path, required=True)
+    prepare.add_argument("--stealth", action="store_true")
 
     inject = commands.add_parser("inject")
     inject.add_argument("--app", type=Path, required=True)
@@ -230,10 +232,10 @@ def run_command(args: argparse.Namespace) -> dict:
         return check_runtime(bundle_info(args.app), args.dylib, args.force)
 
     if args.command == "convert-macos":
-        return convert_bundle(inspect_bundle(args.app), args.output_dir, args.identity, args.keychain_instance, args.bundle_id, args.bundle_name, incoming_network=args.incoming_network, force=args.force)
+        return convert_bundle(inspect_bundle(args.app), args.output_dir, args.identity, args.keychain_instance, args.bundle_id, args.bundle_name, incoming_network=args.incoming_network, force=args.force, bypass=args.bypass)
 
     if args.command == "prepare-injection":
-        return prepare_injection(bundle_info(args.app), args.dylib, args.output_dir)
+        return prepare_injection(bundle_info(args.app), args.dylib, args.output_dir, args.stealth)
 
     if args.command == "inject":
         return apply_injection(bundle_info(args.app), args.prepared)

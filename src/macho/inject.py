@@ -40,6 +40,21 @@ def retag_catalyst(data: bytes) -> bytes:
     finally:
         Path(path).unlink(missing_ok=True)
 
+def rename_id(data: bytes, install_name: str) -> bytes:
+    descriptor, path = tempfile.mkstemp(suffix=".dylib")
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+        result = subprocess.run(
+            ["/usr/bin/xcrun", "install_name_tool", "-id", install_name, path],
+            capture_output=True, text=True,
+        )
+        if result.returncode:
+            raise MachOError(f"Could not rename the dylib: {result.stderr.strip()}")
+        return Path(path).read_bytes()
+    finally:
+        Path(path).unlink(missing_ok=True)
+
 def bounded_read(handle) -> bytes:
     data = handle.read(MAX_LIBRARY_BYTES + 1)
     if len(data) > MAX_LIBRARY_BYTES:
@@ -47,7 +62,7 @@ def bounded_read(handle) -> bytes:
     
     return data
 
-def read_library(source: Path, target: MachO) -> tuple[str, bytes, dict, bytes | None]:
+def read_library(source: Path, target: MachO, stealth: bool = False) -> tuple[str, bytes, dict, bytes | None]:
     input_path = source.expanduser().absolute()
     source = input_path.resolve(strict=True)
     if not source.is_file():
@@ -100,7 +115,13 @@ def read_library(source: Path, target: MachO) -> tuple[str, bytes, dict, bytes |
         with config_path.open("rb") as handle:
             config = bounded_read(handle)
 
-    relative = "Frameworks/" + name
+    staged = name
+    if stealth:
+        staged = "lib" + digest(data)[:12] + ".dylib"
+        data = rename_id(data, "@executable_path/Frameworks/" + staged)
+
+    config_name = staged[:-6] + ".config" if config is not None else None
+    relative = "Frameworks/" + staged
     metadata = {
         "source": str(source),
         "binary": relative,
@@ -108,10 +129,10 @@ def read_library(source: Path, target: MachO) -> tuple[str, bytes, dict, bytes |
         "source_sha256": digest(original),
         "prepared_sha256": digest(data),
         "thinned": thinned,
-        "config": "Frameworks/" + config_path.name if config is not None else None,
+        "config": "Frameworks/" + config_name if config is not None else None,
         "config_sha256": digest(config) if config is not None else None,
     }
-    return name, data, metadata, config
+    return staged, data, metadata, config
 
 
 def check_destinations(app: Path, libraries: list[dict]) -> None:
@@ -138,7 +159,7 @@ def check_destinations(app: Path, libraries: list[dict]) -> None:
                 raise MachOError(f"Injection destination already exists or is duplicated: {relative}")
             names.add(path.name.casefold())
 
-def prepare_injection(info: dict, sources: list[Path], output_dir: Path) -> dict:
+def prepare_injection(info: dict, sources: list[Path], output_dir: Path, stealth: bool = False) -> dict:
     app = Path(info["path"])
     output_dir = output_dir.resolve()
     if output_dir.is_relative_to(app):
@@ -153,7 +174,7 @@ def prepare_injection(info: dict, sources: list[Path], output_dir: Path) -> dict
     if not sources:
         raise MachOError("No dylibs supplied for injection")
     
-    prepared = [read_library(source, target) for source in sources]
+    prepared = [read_library(source, target, stealth) for source in sources]
     libraries = [item[2] for item in prepared]
     check_destinations(app, libraries)
     add_dylibs(target_data, [item["load_command"] for item in libraries])

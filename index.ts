@@ -51,6 +51,7 @@ Options:
   --no-sign                   Skip signing (patching invalidates the original signature)
   --macos                     Also build a standalone Mac Catalyst .app (experimental)
   --force                     Re-convert an already-converted Mac app, replacing its unipa runtime
+  --bypass                    Hide jailbreak/debug indicators from the Mac app (anti-detection)
   --native-keychain           Use the system Keychain for --macos output (default: isolated storage)
   --version                   Show version
   --help                      Show this help
@@ -92,6 +93,7 @@ const parseOptions = () => {
       "no-sign": { type: "boolean" },
       macos: { type: "boolean" },
       force: { type: "boolean" },
+      bypass: { type: "boolean" },
       "bundle-id": { type: "string" },
       "bundle-name": { type: "string" },
       "native-keychain": { type: "boolean" },
@@ -131,6 +133,7 @@ const parseOptions = () => {
 
   if (values["native-keychain"] && !values.macos) throw new Error("--native-keychain requires --macos");
   if (values.force && !values.macos) throw new Error("--force requires --macos");
+  if (values.bypass && !values.macos) throw new Error("--bypass requires --macos");
   const keychainInstance = values.macos && !values["native-keychain"] ? "default" : undefined;
 
   return {
@@ -146,6 +149,7 @@ const parseOptions = () => {
     identity: values["no-sign"] ? undefined : (values.identity ?? "-"),
     macos: values.macos ?? false,
     force: values.force ?? false,
+    bypass: values.bypass ?? false,
     keepExtensions: values["keep-extensions"] ?? false,
     excludedExtensions: values["exclude-extension"] ?? [],
     coreOverrides: values["core-for"] ?? [],
@@ -284,7 +288,7 @@ const main = async () => {
   let injection: InjectionPlan | undefined;
   if (options.injectedLibraries.length) {
     log.info("Preparing injected libraries…");
-    injection = await prepareInjection(source.path, options.injectedLibraries, workspace);
+    injection = await prepareInjection(source.path, options.injectedLibraries, workspace, options.bypass);
   }
 
   if (options.macos) await checkCatalystRuntime(source.path, injection?.libraries, options.force);
@@ -397,6 +401,7 @@ const main = async () => {
       { id: options.bundleId !== undefined ? bundle!.bundle_id : undefined },
       injections.length > 0,
       options.force,
+      options.bypass,
     );
 
     log.info(`Mac app: ${macos.name} (${macos.bundle_id})`);
