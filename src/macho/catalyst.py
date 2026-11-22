@@ -88,9 +88,11 @@ def window_geometry(info: dict) -> dict:
     families = info.get("UIDeviceFamily", [1])
     if not isinstance(families, list):
         families = [families]
+
     geometry = dict(WINDOW_GEOMETRY)
     if any(str(family) == "2" for family in families):
         geometry["ipad"] = dict(IPAD_LAYOUT)
+
     return geometry
 
 def run_tool(*arguments: str) -> str:
@@ -115,17 +117,19 @@ def signing_targets(app: Path, binaries: list[Binary], executable: Path) -> list
                 break
             if parent.suffix in (".framework", ".bundle", ".app", ".xpc"):
                 targets.add(parent)
+
     return sorted(targets, key=lambda target: (-len(target.parts), str(target)))
 
-def check_runtime(inspection: dict, libraries: list[str] | None = None) -> dict:
+def check_runtime(inspection: dict, libraries: list[str] | None = None, force: bool = False) -> dict:
     app = Path(inspection["path"])
     frameworks = app / "Frameworks"
     runtime_name = Path(RUNTIME_LIBRARY).name.casefold()
     if frameworks.exists() or frameworks.is_symlink():
         if not frameworks.is_dir():
             raise MachOError(f"Frameworks must be a directory: {frameworks}")
-        if any(item.name.casefold() == runtime_name for item in frameworks.iterdir()):
-            raise MachOError("Mac runtime destination already exists: Frameworks/UnipaRuntime.dylib")
+
+        if any(item.name.casefold() == runtime_name for item in frameworks.iterdir()) and not force:
+            raise MachOError("Mac runtime destination already exists: Frameworks/UnipaRuntime.dylib (use --force to replace it)")
 
     libraries = libraries or []
     if any(Path(library).name.casefold() == runtime_name for library in libraries):
@@ -137,16 +141,21 @@ def check_runtime(inspection: dict, libraries: list[str] | None = None) -> dict:
         for command, _, size in commands(binary)
         if command == 0x25
     )
-    add_dylibs(binary.data, [*libraries, RUNTIME_LIBRARY], reserved_bytes=growth)
+    loaded = dylib_names(binary)
+    pending = [name for name in (*libraries, RUNTIME_LIBRARY) if not force or name not in loaded]
+    if pending:
+        add_dylibs(binary.data, pending, reserved_bytes=growth)
     return {"runtime_library": RUNTIME_LIBRARY}
 
-def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = False) -> Binary:
+def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = False, force: bool = False) -> Binary:
     sdk = Path(run_tool("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"))
     hooks = Path(__file__).resolve().parents[1] / "hooks"
     library = app / "Frameworks" / "UnipaRuntime.dylib"
     library.parent.mkdir(exist_ok=True)
     if library.exists():
-        raise MachOError(f"Runtime helper already exists: {library}")
+        if not force:
+            raise MachOError(f"Runtime helper already exists: {library}")
+        library.unlink()
 
     sources = RUNTIME_HOOKS + (KEYCHAIN_HOOKS if isolated_keychain else [])
     keychain_libraries = ["-lsqlite3"] if isolated_keychain else []
@@ -176,11 +185,14 @@ def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = Fal
         str(library),
     )
 
-    executable.write_bytes(add_dylibs(executable.read_bytes(), [RUNTIME_LIBRARY]))
+    data = executable.read_bytes()
+    if RUNTIME_LIBRARY not in dylib_names(MachO(data)):
+        data = add_dylibs(data, [RUNTIME_LIBRARY])
+    executable.write_bytes(data)
     return inspect_binary(library, app)
 
 def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_instance: str | None = None,
-                   bundle_id_override: str | None = None, bundle_name: str | None = None, *, incoming_network: bool = False) -> dict:
+                   bundle_id_override: str | None = None, bundle_name: str | None = None, *, incoming_network: bool = False, force: bool = False) -> dict:
     source = Path(inspection["path"])
     output_dir = output_dir.resolve()
     if output_dir.is_relative_to(source):
@@ -214,7 +226,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
     if main.platform not in (IOS, MAC_CATALYST):
         raise MachOError("macOS conversion expects an iOS or Mac Catalyst executable")
 
-    check_runtime(inspection)
+    check_runtime(inspection, force=force)
     
     vtool = run_tool("/usr/bin/xcrun", "--find", "vtool")
     install_name_tool = run_tool("/usr/bin/xcrun", "--find", "install_name_tool")
@@ -316,7 +328,7 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
         report["compatibility_sandbox"] = compatibility_sandbox()
 
         executable = pending / main_relative
-        helper = add_runtime_hooks(executable, pending, keychain is not None)
+        helper = add_runtime_hooks(executable, pending, keychain is not None, force=force)
         binaries.append(helper)
         report_binary = {
             "binary": str(helper.relative),

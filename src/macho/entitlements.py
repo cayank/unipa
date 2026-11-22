@@ -62,6 +62,7 @@ def configure_location_access(info: dict) -> bool:
         if isinstance(description, str) and description.strip():
             info["NSLocationUsageDescription"] = description
             return True
+
     return False
 
 # restrict host features that an iOS app may mistake for a jailbreak
@@ -69,9 +70,7 @@ def macos_entitlements(keychain_directory: Path | None = None, *, location: bool
     rules = ["(deny process-fork)"]
     operations = "file* file-read* file-read-metadata file-ioctl"
     rules.extend(f'(deny {operations} (literal "{path}"))' for path in DENIED_FILES)
-    rules.extend(
-        f'(deny {operations} (subpath "{path}"))' for path in DENIED_DIRECTORIES
-    )
+    rules.extend(f'(deny {operations} (subpath "{path}"))' for path in DENIED_DIRECTORIES)
     entitlements = {
         "com.apple.security.app-sandbox": True,
         "com.apple.security.network.client": True,
@@ -87,4 +86,5 @@ def macos_entitlements(keychain_directory: Path | None = None, *, location: bool
     if keychain_directory is not None:
         relative = keychain_directory.relative_to(Path.home())
         entitlements["com.apple.security.temporary-exception.files.home-relative-path.read-write"] = [f"/{relative}/"]
+
     return entitlements

@@ -57,9 +57,10 @@ export const checkCatalystTools = async (): Promise<void> => {
   }
 };
 
-export const checkCatalystRuntime = async (app: string, libraries: InjectedLibrary[] = []): Promise<void> => {
+export const checkCatalystRuntime = async (app: string, libraries: InjectedLibrary[] = [], force = false): Promise<void> => {
   const args = ["--app", app];
   for (const library of libraries) args.push("--dylib", library.load_command);
+  if (force) args.push("--force");
   await runMachO("check-macos-runtime", args);
 };
 
@@ -70,9 +71,11 @@ export const createCatalystApp = async (
   keychainInstance?: string,
   bundle: { id?: string; name?: string } = {},
   incomingNetwork = false,
+  force = false,
 ): Promise<CatalystConversion> => {
   const args = ["--app", app, "--output-dir", outputDir, "--identity", identity];
   if (incomingNetwork) args.push("--incoming-network");
+  if (force) args.push("--force");
   if (keychainInstance !== undefined) {
     args.push("--keychain-instance", keychainInstance);
   }

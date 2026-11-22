@@ -38,19 +38,20 @@ Options:
   --app <path>                Reference app to process (default: choose from a list)
   --pid <pid>                 Use an existing process of the selected app
   --core <file>               Use an existing core instead of taking a new dump
-  --wait-ms <ms>              Delay before dumping (default: 2000)
-  --work-dir <dir>            Parent directory for runs (default: project's output directory)
-  --base <0xaddress>          Select one verified runtime base for the main executable
   --core-for <path=core>      Core for another binary in the bundle (repeatable)
+  --wait-ms <ms>              Delay before dumping (default: 2000)
+  --base <0xaddress>          Select one verified runtime base for the main executable
   --keep-extensions           Keep PlugIns/*.appex (default: removed from the output)
   --exclude-extension <name>  Remove one extension, e.g. Name.appex (repeatable)
   --inject <file>             Embed a local dylib (repeatable; .gz and .xz supported)
-  --identity <name>           codesign identity (default: ad-hoc)
   --bundle-id [id]            Set the output bundle ID (random generates a suffix)
   --bundle-name [name]        Set the output app name (random generates a suffix)
-  --native-keychain           Use the system Keychain for --macos output (default: isolated storage)
-  --macos                     Also build a standalone Mac Catalyst .app (experimental)
+  --work-dir <dir>            Parent directory for runs (default: project's output directory)
+  --identity <name>           codesign identity (default: ad-hoc)
   --no-sign                   Skip signing (patching invalidates the original signature)
+  --macos                     Also build a standalone Mac Catalyst .app (experimental)
+  --force                     Re-convert an already-converted Mac app, replacing its unipa runtime
+  --native-keychain           Use the system Keychain for --macos output (default: isolated storage)
   --version                   Show version
   --help                      Show this help
 
@@ -90,6 +91,7 @@ const parseOptions = () => {
       "exclude-extension": { type: "string", multiple: true },
       "no-sign": { type: "boolean" },
       macos: { type: "boolean" },
+      force: { type: "boolean" },
       "bundle-id": { type: "string" },
       "bundle-name": { type: "string" },
       "native-keychain": { type: "boolean" },
@@ -128,6 +130,7 @@ const parseOptions = () => {
   }
 
   if (values["native-keychain"] && !values.macos) throw new Error("--native-keychain requires --macos");
+  if (values.force && !values.macos) throw new Error("--force requires --macos");
   const keychainInstance = values.macos && !values["native-keychain"] ? "default" : undefined;
 
   return {
@@ -142,6 +145,7 @@ const parseOptions = () => {
     base: values.base,
     identity: values["no-sign"] ? undefined : (values.identity ?? "-"),
     macos: values.macos ?? false,
+    force: values.force ?? false,
     keepExtensions: values["keep-extensions"] ?? false,
     excludedExtensions: values["exclude-extension"] ?? [],
     coreOverrides: values["core-for"] ?? [],
@@ -283,7 +287,7 @@ const main = async () => {
     injection = await prepareInjection(source.path, options.injectedLibraries, workspace);
   }
 
-  if (options.macos) await checkCatalystRuntime(source.path, injection?.libraries);
+  if (options.macos) await checkCatalystRuntime(source.path, injection?.libraries, options.force);
 
   let app = path.join(workspace, "Payload", path.basename(source.path));
   await mkdir(path.dirname(app), { mode: 0o700 });
@@ -379,7 +383,7 @@ const main = async () => {
 
   const catalystSource = sourceInspection.platform === 6;
   const ipa = catalystSource ? null : await pack(app, workspace, identity, injections);
-  const patchedApp = catalystSource ? await packApp(app, workspace, identity, injections) : null;
+  const patchedApp = catalystSource && !options.macos ? await packApp(app, workspace, identity, injections) : null;
 
   let macos = null;
   if (options.macos) {
@@ -392,6 +396,7 @@ const main = async () => {
       options.keychainInstance,
       { id: options.bundleId !== undefined ? bundle!.bundle_id : undefined },
       injections.length > 0,
+      options.force,
     );
 
     log.info(`Mac app: ${macos.name} (${macos.bundle_id})`);

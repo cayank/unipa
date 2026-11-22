@@ -8,6 +8,8 @@ Before dumping, unipa checks that `vtool`, `install_name_tool`, and `clang` are 
 
 Every binary must be a decrypted, thin arm64 Mach-O file, and the main executable must target iOS or Mac Catalyst. Kept iOS extensions are rejected. The converter uses `vtool` to retag iOS build-version commands as Mac Catalyst with minimum version 11.0. Each binary keeps its SDK version, with 14.0 as the floor, because UIKit enables newer behavior, such as the iPadOS 18 tab bar, only for apps built with a newer SDK. Libraries that are already Mac Catalyst or native macOS keep their platform. Retagging changes metadata, not the code, and does not guarantee runtime compatibility.
 
+Use `--macos --force` to refresh the runtime in an already-converted app. This builds a new Mac copy and leaves the input unchanged.
+
 References to `@rpath/libswiftUIKit.dylib` are rewritten to `/System/iOSSupport/usr/lib/swift/libswiftUIKit.dylib`. Each binary is checked again for platform and library paths before signing.
 
 Hooks in `src/hooks/` are compiled into `UnipaRuntime.dylib` and loaded by the executable. Preflight checks filename conflicts and header space for the runtime, injected libraries, and platform changes.
