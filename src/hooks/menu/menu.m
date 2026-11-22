@@ -127,17 +127,19 @@ static id keychainMenu(void) {
 }
 
 static id unipaMenu(void) {
-    // The Language submenu appears only when the app ships more than its base localization.
+    // What the app renders: layout, appearance, and (when the app ships more than its base) language.
     NSMutableArray *display = [NSMutableArray arrayWithObjects:layoutMenu(), appearanceMenu(), nil];
     id language = languageMenu();
     if (language) [display addObject:language];
-    [display addObject:makeCommand(@"Keep on Top", @"window.top", unipaKeepsOnTop(), YES)];
-    [display addObject:makeCommand(@"Hide Title Bar", @"window.titlebar", unipaHidesTitleBar(), YES)];
 
-    // About comes first, like an app menu; then appearance, identity and data, tools, and the reset.
+    // About, then display, window, identity, tools, and the destructive reset last.
     return makeMenu(@"unipa", menuIdentifier, 0, @[
         makeMenu(@"", @"unipa.menu.about", menuOptionsDisplayInline, @[makeCommand(@"About unipa", @"about", NO, YES)]),
         makeMenu(@"", @"unipa.menu.display", menuOptionsDisplayInline, display),
+        makeMenu(@"", @"unipa.menu.window", menuOptionsDisplayInline, @[
+            makeCommand(@"Keep on Top", @"window.top", unipaKeepsOnTop(), YES),
+            makeCommand(@"Hide Title Bar", @"window.titlebar", unipaHidesTitleBar(), YES),
+        ]),
         makeMenu(@"", @"unipa.menu.identity", menuOptionsDisplayInline, @[locationMenu(), keychainMenu()]),
         makeMenu(@"", @"unipa.menu.tools", menuOptionsDisplayInline, @[
             makeCommand(@"Device Info", @"data.device", NO, YES),
