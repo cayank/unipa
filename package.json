@@ -17,7 +17,8 @@
     "start": "bun run index.ts",
     "clean:cores": "bun run scripts/clean-cores.ts",
     "format": "bun fmt",
-    "format:check": "bun fmt --check"
+    "format:check": "bun fmt --check",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.7.5"
