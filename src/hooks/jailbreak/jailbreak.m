@@ -9,6 +9,7 @@
 #import <fcntl.h>
 #import <sys/stat.h>
 #import <sys/mount.h>
+#import <mach-o/dyld.h>
 #import "layout/layout.h"
 
 static char appBundleName[256];
@@ -59,6 +60,12 @@ static int my_statfs(const char *p, struct statfs *b) {
     return r;
 }
 IP(my_statfs, statfs)
+static const char *my_dyld_get_image_name(uint32_t index) {
+    const char *name = _dyld_get_image_name(index);
+    if (name && looksLikeJailbreak(name)) return "/usr/lib/libSystem.B.dylib";
+    return name;
+}
+IP(my_dyld_get_image_name, _dyld_get_image_name)
 
 static BOOL (*originalFileExists)(id, SEL, NSString *);
 static BOOL fileExists(id self, SEL _cmd, NSString *path) {
