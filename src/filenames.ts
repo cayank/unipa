@@ -1,7 +1,7 @@
 const maxFilenameBytes = 255;
 const runSuffixLength = 6;
 
-function filenameStem(name: string, maxLength: number): string {
+const filenameStem = (name: string, maxLength: number): string => {
   const stem = name
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
@@ -13,10 +13,10 @@ function filenameStem(name: string, maxLength: number): string {
   return stem.slice(0, maxLength).replace(/-+$/, "") || "app";
 }
 
-export function outputFilename(name: string, suffix: string): string {
+export const outputFilename = (name: string, suffix: string): string => {
   return filenameStem(name, maxFilenameBytes - Buffer.byteLength(suffix)) + suffix;
-}
+};
 
-export function runDirectoryPrefix(appName: string): string {
+export const runDirectoryPrefix = (appName: string): string => {
   return `${filenameStem(appName, maxFilenameBytes - runSuffixLength - 1)}-`;
-}
+};

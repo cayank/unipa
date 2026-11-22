@@ -1,7 +1,7 @@
-import path from "node:path";
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { chmod, lstat, realpath, rename, stat } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import path from "node:path";
 import { log } from "./logger";
 
 type ExecuteOptions = {
@@ -21,7 +21,7 @@ class CommandError extends Error {
   }
 }
 
-async function readOutput(stream: ReadableStream<NodeJS.BufferSource>, onLine?: (line: string) => void): Promise<string> {
+const readOutput = async (stream: ReadableStream<NodeJS.BufferSource>, onLine?: (line: string) => void): Promise<string> => {
   if (!onLine) return new Response(stream).text();
 
   let output = "";
@@ -39,9 +39,9 @@ async function readOutput(stream: ReadableStream<NodeJS.BufferSource>, onLine?: 
 
   if (pending) onLine(pending);
   return output;
-}
+};
 
-export async function execute(command: string[], { cwd, interactive = false }: ExecuteOptions = {}): Promise<string> {
+export const execute = async (command: string[], { cwd, interactive = false }: ExecuteOptions = {}): Promise<string> => {
   const child = Bun.spawn(command, {
     cwd,
     stdin: interactive ? "inherit" : "ignore",
@@ -59,14 +59,14 @@ export async function execute(command: string[], { cwd, interactive = false }: E
 
   if (exitCode !== 0) throw new CommandError(command, exitCode, stderr, stdout);
   return stdout;
-}
+};
 
 export type ProcessEntry = { pid: number; executable: string };
 export type MatchedProcess = ProcessEntry & { matchedBy: "path" | "sha256" };
 
 const digestCache = new Map<string, { signature: string; digest: string }>();
 
-async function executableDigest(executable: string): Promise<string> {
+const executableDigest = async (executable: string): Promise<string> => {
   const info = await stat(executable);
   const signature = [info.dev, info.ino, info.size, info.mtimeMs, info.ctimeMs].join(":");
 
@@ -80,9 +80,9 @@ async function executableDigest(executable: string): Promise<string> {
   digestCache.set(executable, { signature, digest });
 
   return digest;
-}
+};
 
-export function parseProcessList(output: string): ProcessEntry[] {
+export const parseProcessList = (output: string): ProcessEntry[] => {
   const processes: ProcessEntry[] = [];
 
   for (const line of output.split("\n")) {
@@ -92,9 +92,9 @@ export function parseProcessList(output: string): ProcessEntry[] {
   }
 
   return processes;
-}
+};
 
-export async function findMatchingProcesses(executable: string, processes: ProcessEntry[]): Promise<MatchedProcess[]> {
+export const findMatchingProcesses = async (executable: string, processes: ProcessEntry[]): Promise<MatchedProcess[]> => {
   const target = await realpath(executable);
   const targetInfo = await stat(target);
   const matches: MatchedProcess[] = [];
@@ -124,7 +124,7 @@ export async function findMatchingProcesses(executable: string, processes: Proce
     }
   }
   return matches;
-}
+};
 
 type DumpOptions = {
   appPath: string;
@@ -134,7 +134,7 @@ type DumpOptions = {
   waitMs: number;
 };
 
-export async function dumpCore(options: DumpOptions): Promise<number> {
+export const dumpCore = async (options: DumpOptions): Promise<number> => {
   const { appPath, executable, outputPath, pid, waitMs } = options;
   const existing = await matchingProcesses(executable);
   if (pid === undefined && existing.length === 0) {
@@ -172,9 +172,9 @@ export async function dumpCore(options: DumpOptions): Promise<number> {
   await chmod(outputPath, 0o600);
   incomplete ? log.info(`Incomplete core saved for recovery: ${outputPath}`) : log.success(`Core dump saved: ${outputPath}`);
   return targetPid;
-}
+};
 
-export async function forceCloseApp(executable: string, pid: number): Promise<boolean> {
+export const forceCloseApp = async (executable: string, pid: number): Promise<boolean> => {
   const matches = await matchingPids(executable);
   if (!matches.includes(pid)) {
     try {
@@ -194,18 +194,18 @@ export async function forceCloseApp(executable: string, pid: number): Promise<bo
     if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
     throw error;
   }
-}
+};
 
-export async function matchingProcesses(executable: string): Promise<MatchedProcess[]> {
+export const matchingProcesses = async (executable: string): Promise<MatchedProcess[]> => {
   const output = await execute(["/bin/ps", "-axo", "pid=,comm="]);
   return findMatchingProcesses(executable, parseProcessList(output));
-}
+};
 
-export async function matchingPids(executable: string): Promise<number[]> {
+export const matchingPids = async (executable: string): Promise<number[]> => {
   return (await matchingProcesses(executable)).map((entry) => entry.pid);
-}
+};
 
-export async function waitForPid(executable: string, requested?: number): Promise<number> {
+export const waitForPid = async (executable: string, requested?: number): Promise<number> => {
   const deadline = Date.now() + 15_000;
 
   do {
@@ -228,4 +228,4 @@ export async function waitForPid(executable: string, requested?: number): Promis
   ];
 
   throw new Error(errorMessage.join(" "));
-}
+};

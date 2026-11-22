@@ -58,14 +58,14 @@ sudo is used only for gcore and for changing ownership of the core file.
 macOS only. Requires Python 3.10+. Set UNIPA_PYTHON to choose the interpreter.
 `;
 
-function readNonNegativeInteger(value: string | undefined, fallback: number, name: string): number {
+const readNonNegativeInteger = (value: string | undefined, fallback: number, name: string): number => {
   if (value === undefined) return fallback;
   const number = Number(value);
   if (!/^\d+$/.test(value) || !Number.isSafeInteger(number)) throw new Error(`${name} must be a non-negative integer`);
   return number;
-}
+};
 
-function parseOptions() {
+const parseOptions = () => {
   const argv = Bun.argv.slice(2);
   const args = argv.map((argument, index) => {
     const optionalValue = argument === "--bundle-id" || argument === "--bundle-name";
@@ -147,9 +147,9 @@ function parseOptions() {
     coreOverrides: values["core-for"] ?? [],
     injectedLibraries: values.inject ?? [],
   };
-}
+};
 
-async function getExcludedExtensions(appPath: string, keepExtensions: boolean, requested: string[]): Promise<string[]> {
+const getExcludedExtensions = async (appPath: string, keepExtensions: boolean, requested: string[]): Promise<string[]> => {
   let defaultExclusions: string[] = [];
 
   if (!keepExtensions) {
@@ -173,9 +173,9 @@ async function getExcludedExtensions(appPath: string, keepExtensions: boolean, r
   }
 
   return excluded;
-}
+};
 
-async function getCoreOverrides(appPath: string, encrypted: string[], excluded: string[], entries: string[]): Promise<Map<string, string>> {
+const getCoreOverrides = async (appPath: string, encrypted: string[], excluded: string[], entries: string[]): Promise<Map<string, string>> => {
   const extraCores = new Map<string, string>();
 
   for (const entry of entries) {
@@ -200,9 +200,9 @@ async function getCoreOverrides(appPath: string, encrypted: string[], excluded: 
   }
 
   return extraCores;
-}
+};
 
-async function createWorkspace(selected: string, source: Bundle, workDir: string): Promise<string> {
+const createWorkspace = async (selected: string, source: Bundle, workDir: string): Promise<string> => {
   let outputRoot = path.resolve(workDir);
   const selectedRoot = await realpath(selected);
   const insideSource = (candidate: string) => [source.path, selectedRoot].some((root) => candidate === root || candidate.startsWith(root + path.sep));
@@ -231,15 +231,15 @@ async function createWorkspace(selected: string, source: Bundle, workDir: string
   const workspace = await mkdtemp(path.join(outputRoot, runDirectoryPrefix(source.name)));
   await chmod(workspace, 0o700);
   return workspace;
-}
+};
 
-async function saveManifest(file: string, manifest: unknown): Promise<void> {
+const saveManifest = async (file: string, manifest: unknown): Promise<void> => {
   const pending = `${file}.pending`;
   await writeFile(pending, JSON.stringify(manifest, null, 2) + "\n", { mode: 0o600 });
   await rename(pending, file);
-}
+};
 
-async function getHostInfo() {
+const getHostInfo = async () => {
   const [version, build] = await Promise.all([execute(["/usr/bin/sw_vers", "-productVersion"]), execute(["/usr/bin/sw_vers", "-buildVersion"])]);
   return {
     platform: process.platform,
@@ -247,9 +247,9 @@ async function getHostInfo() {
     build: build.trim(),
     arch: process.arch,
   };
-}
+};
 
-async function main() {
+const main = async () => {
   if (process.platform !== "darwin") {
     throw new Error("unipa is only supported on macOS.");
   }
@@ -444,7 +444,7 @@ async function main() {
   ipa && log.success(`IPA ready: ${ipa}`);
   patchedApp && log.success(`Mac app ready: ${patchedApp}`);
   macos && log.success(`macOS app ready: ${macos.app}`);
-}
+};
 
 if (import.meta.main) {
   main().catch((error) => {

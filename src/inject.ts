@@ -17,16 +17,16 @@ export type InjectionPlan = {
   libraries: InjectedLibrary[];
 };
 
-export async function prepareInjection(app: string, libraries: string[], workspace: string): Promise<InjectionPlan> {
+export const prepareInjection = async (app: string, libraries: string[], workspace: string): Promise<InjectionPlan> => {
   const args = ["--app", app, "--output-dir", path.join(workspace, "injection")];
   for (const library of libraries) {
     args.push("--dylib", library);
   }
 
   return runMachO<InjectionPlan>("prepare-injection", args);
-}
+};
 
-export async function injectLibraries(app: string, plan: InjectionPlan): Promise<InjectedLibrary[]> {
+export const injectLibraries = async (app: string, plan: InjectionPlan): Promise<InjectedLibrary[]> => {
   const result = await runMachO<{ libraries: InjectedLibrary[] }>("inject", ["--app", app, "--prepared", plan.directory]);
   return result.libraries;
-}
+};

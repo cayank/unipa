@@ -3,7 +3,7 @@ import { execute } from "../process";
 
 const cliPath = path.join(import.meta.dir, "cli.py");
 
-export async function runMachO<T>(command: string, args: string[]): Promise<T> {
+export const runMachO = async <T>(command: string, args: string[]): Promise<T> => {
   const pyEnv = process.env.UNIPA_PYTHON || "python3";
   const output = await execute([pyEnv, "-B", cliPath, command, ...args]);
 
@@ -12,7 +12,7 @@ export async function runMachO<T>(command: string, args: string[]): Promise<T> {
   } catch {
     throw new Error(`Invalid JSON from Mach-O command (${command})`);
   }
-}
+};
 
 export type Bundle = {
   path: string;

@@ -1,9 +1,9 @@
-import path from "node:path";
 import { readdir, realpath } from "node:fs/promises";
+import path from "node:path";
 import { select, Separator } from "@inquirer/prompts";
 import { log } from "./logger";
-import { execute } from "./process";
 import { runMachO, type Bundle } from "./macho/run";
+import { execute } from "./process";
 
 type Application = {
   _name: string;
@@ -11,7 +11,7 @@ type Application = {
   obtained_from?: string;
 };
 
-export async function selectApp(): Promise<string> {
+export const selectApp = async (): Promise<string> => {
   log.info("Searching for installed iOS apps…");
 
   const output = await execute(["/usr/sbin/system_profiler", "SPApplicationsDataType", "-json"]);
@@ -38,9 +38,9 @@ export async function selectApp(): Promise<string> {
       })),
     ],
   });
-}
+};
 
-export async function resolveApp(selected: string): Promise<Bundle> {
+export const resolveApp = async (selected: string): Promise<Bundle> => {
   const root = await realpath(selected);
   const wrapper = path.join(root, "Wrapper");
   let children: string[] = [];
@@ -55,4 +55,4 @@ export async function resolveApp(selected: string): Promise<Bundle> {
 
   if (children.length > 1) throw new Error("Multiple apps inside Wrapper; select the inner app with --app");
   return runMachO<Bundle>("bundle-info", ["--app", children[0] ?? root]);
-}
+};

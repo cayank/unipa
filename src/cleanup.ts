@@ -14,7 +14,7 @@ type CleanupResult = {
   errors: string[];
 };
 
-export async function cleanupRun({ executable, pid, generatedCore }: CleanupOptions): Promise<CleanupResult> {
+export const cleanupRun = async ({ executable, pid, generatedCore }: CleanupOptions): Promise<CleanupResult> => {
   const result: CleanupResult = { appClosed: null, coreDeleted: false, errors: [] };
 
   if (pid !== undefined) {
@@ -47,4 +47,4 @@ export async function cleanupRun({ executable, pid, generatedCore }: CleanupOpti
   }
 
   return result;
-}
+};

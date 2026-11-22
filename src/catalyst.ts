@@ -1,6 +1,6 @@
-import { execute } from "./process";
-import { runMachO } from "./macho/run";
 import type { InjectedLibrary } from "./inject";
+import { runMachO } from "./macho/run";
+import { execute } from "./process";
 
 type CatalystBinary = {
   binary: string;
@@ -46,7 +46,7 @@ export type CatalystConversion = {
   };
 };
 
-export async function checkCatalystTools(): Promise<void> {
+export const checkCatalystTools = async (): Promise<void> => {
   if (process.arch !== "arm64") throw new Error("--macos requires an Apple Silicon Mac");
   try {
     await execute(["/usr/bin/xcrun", "--find", "vtool"]);
@@ -55,22 +55,22 @@ export async function checkCatalystTools(): Promise<void> {
   } catch (error) {
     throw new Error("--macos requires Xcode Command Line Tools; install them with xcode-select --install", { cause: error });
   }
-}
+};
 
-export async function checkCatalystRuntime(app: string, libraries: InjectedLibrary[] = []): Promise<void> {
+export const checkCatalystRuntime = async (app: string, libraries: InjectedLibrary[] = []): Promise<void> => {
   const args = ["--app", app];
   for (const library of libraries) args.push("--dylib", library.load_command);
   await runMachO("check-macos-runtime", args);
-}
+};
 
-export async function createCatalystApp(
+export const createCatalystApp = async (
   app: string,
   outputDir: string,
   identity: string,
   keychainInstance?: string,
   bundle: { id?: string; name?: string } = {},
   incomingNetwork = false,
-): Promise<CatalystConversion> {
+): Promise<CatalystConversion> => {
   const args = ["--app", app, "--output-dir", outputDir, "--identity", identity];
   if (incomingNetwork) args.push("--incoming-network");
   if (keychainInstance !== undefined) {
@@ -79,4 +79,4 @@ export async function createCatalystApp(
   if (bundle.id !== undefined) args.push(`--bundle-id=${bundle.id}`);
   if (bundle.name !== undefined) args.push(`--bundle-name=${bundle.name}`);
   return runMachO<CatalystConversion>("convert-macos", args);
-}
+};
