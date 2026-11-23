@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import plistlib
 import re
 import subprocess
 import tempfile
@@ -159,6 +160,18 @@ def build_stub(name: str, frameworks: Path, deployment: str = "14.0") -> Path:
             str(swift),
         )
 
+    info = {
+        "CFBundleExecutable": name,
+        "CFBundleIdentifier": f"com.unipa.stub.{name}",
+        "CFBundleName": name,
+        "CFBundlePackageType": "FMWK",
+        "CFBundleInfoDictionaryVersion": "6.0",
+        "CFBundleShortVersionString": "1.0",
+        "CFBundleVersion": "1",
+        "MinimumOSVersion": "11.0",
+        "LSMinimumSystemVersion": "11.0",
+    }
+    (framework / "Info.plist").write_bytes(plistlib.dumps(info, fmt=plistlib.FMT_BINARY))
     return binary
 
 def retarget(binary: Path, name: str, install_name_tool: str) -> bool:
