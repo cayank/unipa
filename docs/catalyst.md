@@ -38,6 +38,10 @@ These restrictions apply only to the generated Mac app. They reduce filesystem-b
 
 This is meant for testing apps you work on. It does not defeat server-side checks or app-specific integrity verification.
 
+## Framework stubs
+
+`--stub-frameworks ActivityKit` adds a placeholder for an iOS framework missing on macOS. Separate multiple names with commas. Stubs don’t implement the framework’s features and require its Swift interface from the iOS SDK.
+
 ## Location access
 
 When the source app declares a nonempty location usage description, conversion enables the macOS sandbox location entitlement. Existing purpose strings are preserved. If only an iOS purpose string exists, it also supplies `NSLocationUsageDescription` for macOS. Apps without a declared purpose receive no location entitlement.

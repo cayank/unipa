@@ -52,6 +52,7 @@ Options:
   --macos                     Also build a standalone Mac Catalyst .app (experimental)
   --force                     Re-convert an already-converted Mac app, replacing its unipa runtime
   --bypass                    Hide jailbreak/debug indicators from the Mac app (anti-detection)
+  --stub-frameworks <names>   Stub iOS-only frameworks missing on macOS, e.g. ActivityKit (comma-separated)
   --native-keychain           Use the system Keychain for --macos output (default: isolated storage)
   --version                   Show version
   --help                      Show this help
@@ -94,6 +95,7 @@ const parseOptions = () => {
       macos: { type: "boolean" },
       force: { type: "boolean" },
       bypass: { type: "boolean" },
+      "stub-frameworks": { type: "string" },
       "bundle-id": { type: "string" },
       "bundle-name": { type: "string" },
       "native-keychain": { type: "boolean" },
@@ -134,6 +136,7 @@ const parseOptions = () => {
   if (values["native-keychain"] && !values.macos) throw new Error("--native-keychain requires --macos");
   if (values.force && !values.macos) throw new Error("--force requires --macos");
   if (values.bypass && !values.macos) throw new Error("--bypass requires --macos");
+  if (values["stub-frameworks"] && !values.macos) throw new Error("--stub-frameworks requires --macos");
   const keychainInstance = values.macos && !values["native-keychain"] ? "default" : undefined;
 
   return {
@@ -150,6 +153,7 @@ const parseOptions = () => {
     macos: values.macos ?? false,
     force: values.force ?? false,
     bypass: values.bypass ?? false,
+    stubFrameworks: values["stub-frameworks"],
     keepExtensions: values["keep-extensions"] ?? false,
     excludedExtensions: values["exclude-extension"] ?? [],
     coreOverrides: values["core-for"] ?? [],
@@ -402,6 +406,7 @@ const main = async () => {
       injections.length > 0,
       options.force,
       options.bypass,
+      options.stubFrameworks,
     );
 
     log.info(`Mac app: ${macos.name} (${macos.bundle_id})`);

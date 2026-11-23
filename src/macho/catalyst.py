@@ -15,6 +15,7 @@ from reader import MachO, MachOError
 from load_commands import add_dylibs, build_platform, build_version, commands, dylib_names
 from bundle import app_filename, apply_bundle_settings, bundle_settings
 from keychain import keychain_configuration, prepare_keychain_directory
+from stub import build_stub, retarget
 
 ARM64 = 0x100000C
 MACOS = 1
@@ -200,7 +201,7 @@ def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = Fal
     return inspect_binary(library, app)
 
 def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_instance: str | None = None,
-                   bundle_id_override: str | None = None, bundle_name: str | None = None, *, incoming_network: bool = False, force: bool = False, bypass: bool = False) -> dict:
+                   bundle_id_override: str | None = None, bundle_name: str | None = None, *, incoming_network: bool = False, force: bool = False, bypass: bool = False, stub_frameworks: str | None = None) -> dict:
     source = Path(inspection["path"])
     output_dir = output_dir.resolve()
     if output_dir.is_relative_to(source):
@@ -358,6 +359,29 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
             "swift_uikit_fixed": False
         }
         report["binaries"].append(report_binary)
+
+        if stub_frameworks:
+            names = [part.strip() for part in stub_frameworks.split(",") if part.strip()]
+            frameworks_dir = pending / "Frameworks"
+            frameworks_dir.mkdir(exist_ok=True)
+
+            for name in names:
+                stub_binary = build_stub(name, frameworks_dir)
+                changed = [binary for binary in binaries if retarget(pending / binary.relative, name, install_name_tool)]
+                if not changed:
+                    raise MachOError(f"No binary references {name}.framework; nothing to stub")
+
+                stub = inspect_binary(stub_binary, pending)
+                binaries.append(stub)
+                report["binaries"].append({
+                    "binary": str(stub.relative),
+                    "original_platform": None,
+                    "platform": stub.platform,
+                    "sdk": stub.sdk,
+                    "swift_uikit_fixed": False,
+                })
+
+            report["stub_frameworks"] = names
 
         for target in signing_targets(pending, binaries, executable):
             run_tool("/usr/bin/codesign", "--force", "--sign", identity, str(target))

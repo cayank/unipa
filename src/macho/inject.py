@@ -134,7 +134,6 @@ def read_library(source: Path, target: MachO, stealth: bool = False) -> tuple[st
     }
     return staged, data, metadata, config
 
-
 def check_destinations(app: Path, libraries: list[dict]) -> None:
     frameworks = app / "Frameworks"
     if frameworks.is_symlink() or (frameworks.exists() and not frameworks.is_dir()):

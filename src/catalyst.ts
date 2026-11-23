@@ -73,11 +73,13 @@ export const createCatalystApp = async (
   incomingNetwork = false,
   force = false,
   bypass = false,
+  stubFrameworks?: string,
 ): Promise<CatalystConversion> => {
   const args = ["--app", app, "--output-dir", outputDir, "--identity", identity];
   if (incomingNetwork) args.push("--incoming-network");
   if (force) args.push("--force");
   if (bypass) args.push("--bypass");
+  if (stubFrameworks) args.push("--stub-frameworks", stubFrameworks);
   if (keychainInstance !== undefined) {
     args.push("--keychain-instance", keychainInstance);
   }

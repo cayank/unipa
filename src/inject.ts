@@ -19,9 +19,7 @@ export type InjectionPlan = {
 
 export const prepareInjection = async (app: string, libraries: string[], workspace: string, stealth = false): Promise<InjectionPlan> => {
   const args = ["--app", app, "--output-dir", path.join(workspace, "injection")];
-  for (const library of libraries) {
-    args.push("--dylib", library);
-  }
+  for (const library of libraries) args.push("--dylib", library);
   if (stealth) args.push("--stealth");
 
   return runMachO<InjectionPlan>("prepare-injection", args);
