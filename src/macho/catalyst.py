@@ -15,6 +15,7 @@ from reader import MachO, MachOError
 from load_commands import add_dylibs, build_platform, build_version, commands, dylib_names
 from bundle import app_filename, apply_bundle_settings, bundle_settings
 from keychain import keychain_configuration, prepare_keychain_directory
+from settings import prepare_settings_directory
 from stub import build_stub, retarget
 
 ARM64 = 0x100000C
@@ -26,6 +27,7 @@ CATALYST_SWIFT_UIKIT = "/System/iOSSupport/usr/lib/swift/libswiftUIKit.dylib"
 RUNTIME_LIBRARY = "@executable_path/Frameworks/UnipaRuntime.dylib"
 RUNTIME_HOOKS = [
     "environment.m",
+    "settings/settings.m",
     "layout/layout.m",
     "layout/screen.m",
     "window/geometry.m",
@@ -41,11 +43,12 @@ RUNTIME_HOOKS = [
     "flex/flex.m",
 ]
 
-BYPASS_HOOKS = ["jailbreak/jailbreak.m"]
+JAILBREAK_HOOKS = ["jailbreak/jailbreak.m"]
+PINNING_HOOKS = ["pinning/pinning.m"]
 KEYCHAIN_HOOKS = ["keychain/interpose.m", "keychain/store.m"]
 WINDOW_GEOMETRY = {
-    "width": 390,
-    "height": 844,
+    "width": 430,
+    "height": 932,
     "resizable": False,
     "lock_aspect_ratio": True,
 }
@@ -156,7 +159,7 @@ def check_runtime(inspection: dict, libraries: list[str] | None = None, force: b
         add_dylibs(binary.data, pending, reserved_bytes=growth)
     return {"runtime_library": RUNTIME_LIBRARY}
 
-def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = False, force: bool = False, bypass: bool = False) -> Binary:
+def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = False, force: bool = False, bypass_jailbreak: bool = False, bypass_pinning: bool = False) -> Binary:
     sdk = Path(run_tool("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"))
     hooks = Path(__file__).resolve().parents[1] / "hooks"
     library = app / "Frameworks" / "UnipaRuntime.dylib"
@@ -166,7 +169,7 @@ def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = Fal
             raise MachOError(f"Runtime helper already exists: {library}")
         library.unlink()
 
-    sources = RUNTIME_HOOKS + (KEYCHAIN_HOOKS if isolated_keychain else []) + (BYPASS_HOOKS if bypass else [])
+    sources = RUNTIME_HOOKS + (KEYCHAIN_HOOKS if isolated_keychain else []) + (JAILBREAK_HOOKS if bypass_jailbreak else []) + (PINNING_HOOKS if bypass_pinning else [])
     keychain_libraries = ["-lsqlite3"] if isolated_keychain else []
 
     run_tool(
@@ -201,7 +204,7 @@ def add_runtime_hooks(executable: Path, app: Path, isolated_keychain: bool = Fal
     return inspect_binary(library, app)
 
 def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_instance: str | None = None,
-                   bundle_id_override: str | None = None, bundle_name: str | None = None, *, incoming_network: bool = False, force: bool = False, bypass: bool = False, stub_frameworks: str | None = None) -> dict:
+                   bundle_id_override: str | None = None, bundle_name: str | None = None, *, incoming_network: bool = False, force: bool = False, bypass_jailbreak: bool = False, bypass_pinning: bool = False, stub_frameworks: str | None = None) -> dict:
     source = Path(inspection["path"])
     output_dir = output_dir.resolve()
     if output_dir.is_relative_to(source):
@@ -342,14 +345,15 @@ def convert_bundle(inspection: dict, output_dir: Path, identity: str, keychain_i
         entitlements = output_dir / "entitlements.plist"
         if keychain:
             prepare_keychain_directory(keychain)
+        settings_dir = prepare_settings_directory(storage_id)
         entitlements.write_bytes(plistlib.dumps(macos_entitlements(
-            Path(keychain["directory"]) if keychain else None, location=location_access, incoming_network=incoming_network
+            Path(keychain["directory"]) if keychain else None, location=location_access, incoming_network=incoming_network, settings_directory=settings_dir
         )))
         entitlements.chmod(0o600)
         report["compatibility_sandbox"] = compatibility_sandbox()
 
         executable = pending / main_relative
-        helper = add_runtime_hooks(executable, pending, keychain is not None, force=force, bypass=bypass)
+        helper = add_runtime_hooks(executable, pending, keychain is not None, force=force, bypass_jailbreak=bypass_jailbreak, bypass_pinning=bypass_pinning)
         binaries.append(helper)
         report_binary = {
             "binary": str(helper.relative),

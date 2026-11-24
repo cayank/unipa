@@ -54,7 +54,8 @@ Options:
   --no-sign                   Skip signing (patching invalidates the original signature)
   --macos                     Also build a standalone Mac Catalyst .app (experimental)
   --force                     Re-convert an already-converted Mac app, replacing its unipa runtime
-  --bypass                    Hide jailbreak/debug indicators from the Mac app (anti-detection)
+  --bypass-jailbreak          Hide jailbreak/debug indicators from the Mac app (anti-detection)
+  --bypass-pinning            Make SSL/TLS trust checks in the Mac app always succeed (anti-detection)
   --stub-frameworks <names>   Stub iOS-only frameworks missing on macOS, e.g. ActivityKit (comma-separated)
   --native-keychain           Use the system Keychain for --macos output (default: isolated storage)
   --version                   Show version
@@ -98,7 +99,8 @@ const parseOptions = () => {
       "no-sign": { type: "boolean" },
       macos: { type: "boolean" },
       force: { type: "boolean" },
-      bypass: { type: "boolean" },
+      "bypass-jailbreak": { type: "boolean" },
+      "bypass-pinning": { type: "boolean" },
       "stub-frameworks": { type: "string" },
       "bundle-id": { type: "string" },
       "bundle-name": { type: "string" },
@@ -147,7 +149,8 @@ const parseOptions = () => {
 
   if (values["native-keychain"] && !values.macos) throw new Error("--native-keychain requires --macos");
   if (values.force && !values.macos) throw new Error("--force requires --macos");
-  if (values.bypass && !values.macos) throw new Error("--bypass requires --macos");
+  if (values["bypass-jailbreak"] && !values.macos) throw new Error("--bypass-jailbreak requires --macos");
+  if (values["bypass-pinning"] && !values.macos) throw new Error("--bypass-pinning requires --macos");
   if (values["stub-frameworks"] && !values.macos) throw new Error("--stub-frameworks requires --macos");
   const keychainInstance = values.macos && !values["native-keychain"] ? "default" : undefined;
 
@@ -165,7 +168,8 @@ const parseOptions = () => {
     identity: values["no-sign"] ? undefined : (values.identity ?? "-"),
     macos: values.macos ?? false,
     force: values.force ?? false,
-    bypass: values.bypass ?? false,
+    bypassJailbreak: values["bypass-jailbreak"] ?? false,
+    bypassPinning: values["bypass-pinning"] ?? false,
     stubFrameworks: values["stub-frameworks"],
     keepExtensions: values["keep-extensions"] ?? false,
     excludedExtensions: values["exclude-extension"] ?? [],
@@ -327,7 +331,7 @@ const processApp = async (
   let injection: InjectionPlan | undefined;
   if (options.injectedLibraries.length) {
     log.info("Preparing injected libraries…");
-    injection = await prepareInjection(source.path, options.injectedLibraries, workspace, options.bypass);
+    injection = await prepareInjection(source.path, options.injectedLibraries, workspace, options.bypassJailbreak);
   }
 
   if (options.macos) await checkCatalystRuntime(source.path, injection?.libraries, options.force);
@@ -440,7 +444,8 @@ const processApp = async (
       { id: options.bundleId !== undefined ? bundle!.bundle_id : undefined },
       injections.length > 0,
       options.force,
-      options.bypass,
+      options.bypassJailbreak,
+      options.bypassPinning,
       options.stubFrameworks,
     );
 

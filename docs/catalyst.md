@@ -34,7 +34,9 @@ These restrictions apply only to the generated Mac app. They reduce filesystem-b
 
 ## Anti-detection bypass
 
-`--bypass` adds `src/hooks/jailbreak/jailbreak.m` to the runtime. It hides jailbreak-related paths and URL schemes and makes the app bundle look read-only like iOS, so apps that refuse to run on a jailbroken device keep working. It also renames each injected dylib to a neutral `lib<hash>.dylib`, so name-based checks cannot spot it. Any matching `.config` file follows the new name.
+`--bypass-jailbreak` adds `src/hooks/jailbreak/jailbreak.m` to the runtime. It hides jailbreak-related paths and URL schemes and makes the app bundle look read-only like iOS, so apps that refuse to run on a jailbroken device keep working. It also renames each injected dylib to a neutral `lib<hash>.dylib`, so name-based checks cannot spot it. Any matching `.config` file follows the new name.
+
+`--bypass-pinning` adds `src/hooks/pinning/pinning.m` to the runtime. It makes `SecTrustEvaluate` and `SecTrustEvaluateWithError` always succeed, so the app accepts a proxy's TLS certificate instead of rejecting it through certificate pinning.
 
 This is meant for testing apps you work on. It does not defeat server-side checks or app-specific integrity verification.
 
@@ -54,7 +56,7 @@ The app must request location permission through macOS. Conversion does not gran
 
 ## Window size
 
-`--macos` uses a fixed 390 × 844 iPhone layout, shrinking it to fit smaller displays. The window is not resizable.
+`--macos` uses a fixed 430 × 932 iPhone layout, shrinking it to fit smaller displays. The window is not resizable.
 
 Apps with iPad support can select an 820 × 1180 layout from **unipa → Layout**. Restart to apply it cleanly. **Switch Now** applies it immediately, but some screens may need a restart. iPad-capable apps may retain some iPad styling in the iPhone layout.
 

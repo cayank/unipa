@@ -72,13 +72,15 @@ export const createCatalystApp = async (
   bundle: { id?: string; name?: string } = {},
   incomingNetwork = false,
   force = false,
-  bypass = false,
+  bypassJailbreak = false,
+  bypassPinning = false,
   stubFrameworks?: string,
 ): Promise<CatalystConversion> => {
   const args = ["--app", app, "--output-dir", outputDir, "--identity", identity];
   if (incomingNetwork) args.push("--incoming-network");
   if (force) args.push("--force");
-  if (bypass) args.push("--bypass");
+  if (bypassJailbreak) args.push("--bypass-jailbreak");
+  if (bypassPinning) args.push("--bypass-pinning");
   if (stubFrameworks) args.push("--stub-frameworks", stubFrameworks);
   if (keychainInstance !== undefined) {
     args.push("--keychain-instance", keychainInstance);
