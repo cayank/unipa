@@ -42,7 +42,7 @@ unipa --app /Applications/Example.app
 unipa --app /Applications/Example.app --pid 12345 --wait-ms 5000
 ```
 
-If the app is already running, unipa uses that process. Otherwise it launches the app. `--pid` picks a specific process, and `--wait-ms` sets how long to wait before dumping. Taking a new core may ask for your `sudo` password.
+For encrypted apps, unipa uses an existing process or launches the app. `--pid` picks a specific process, and `--wait-ms` sets how long to wait before dumping. Taking a new core may ask for your `sudo` password.
 
 <!-- <a href="docs/cli-example.jpg">
   <img src="docs/cli-example.jpg" alt="unipa recovering an app and producing an IPA" width="720">
@@ -53,6 +53,15 @@ To use an existing core without launching the app:
 ```bash
 unipa --app /Applications/Example.app --core /tmp/example.core
 ```
+
+To process a decrypted IPA directly:
+
+```bash
+unipa --decrypted-ipa ./example.ipa
+unipa --decrypted-ipa ./example.ipa --macos
+```
+
+The archive must contain one app under `Payload/` with no encrypted binaries, including extensions. It is processed without launching or dumping. Use either `--app` or `--decrypted-ipa`.
 
 ### Bundle settings
 

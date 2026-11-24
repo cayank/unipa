@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { parseArgs } from "node:util";
 import { version } from "./package.json";
 import {
@@ -33,9 +34,11 @@ Usage:
   unipa [options]
   unipa --app /Applications/Example.app
   unipa --app /Applications/Example.app --core /tmp/example.core
+  unipa --decrypted-ipa ./example.ipa --macos
 
 Options:
   --app <path>                Reference app to process (default: choose from a list)
+  --decrypted-ipa <file>      Process a decrypted IPA without launching or dumping
   --pid <pid>                 Use an existing process of the selected app
   --core <file>               Use an existing core instead of taking a new dump
   --core-for <path=core>      Core for another binary in the bundle (repeatable)
@@ -81,6 +84,7 @@ const parseOptions = () => {
     strict: true,
     options: {
       app: { type: "string" },
+      "decrypted-ipa": { type: "string" },
       core: { type: "string" },
       pid: { type: "string" },
       "work-dir": { type: "string" },
@@ -114,6 +118,14 @@ const parseOptions = () => {
     return;
   }
 
+  if (values["decrypted-ipa"] !== undefined) {
+    if (!values["decrypted-ipa"].trim()) throw new Error("--decrypted-ipa requires a file path");
+    if (values.app !== undefined) throw new Error("--app and --decrypted-ipa cannot be combined");
+    if (values.pid !== undefined || values.core !== undefined || values.base !== undefined || values["core-for"] || values["wait-ms"] !== undefined) {
+      throw new Error("--decrypted-ipa cannot be combined with dump or recovery options");
+    }
+  }
+
   const waitMs = readNonNegativeInteger(values["wait-ms"], 2000, "--wait-ms");
   const pid = values.pid === undefined ? undefined : readNonNegativeInteger(values.pid, 0, "--pid");
   if (pid === 0) throw new Error("--pid cannot be zero");
@@ -144,6 +156,7 @@ const parseOptions = () => {
     bundleId: values["bundle-id"],
     bundleName: values["bundle-name"],
     appPath: values.app,
+    decryptedIpa: values["decrypted-ipa"],
     corePath: values.core,
     pid,
     waitMs,
@@ -274,7 +287,29 @@ const main = async () => {
   const host = await getHostInfo();
   log.info(`Host: macOS ${host.version} (${host.build}), ${host.arch}`);
 
+  if (options.decryptedIpa) {
+    const archive = await realpath(options.decryptedIpa);
+    if (!(await stat(archive)).isFile()) throw new Error("--decrypted-ipa must be a file");
+    const temporary = await mkdtemp(path.join(tmpdir(), "unipa-ipa-"));
+    try {
+      log.info("Extracting decrypted IPA…");
+      const input = await runMachO<{ app: string }>("extract-ipa", ["--ipa", archive, "--output-dir", temporary]);
+      await processApp(options, host, input.app);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+    return;
+  }
+
   const selected = options.appPath ? path.resolve(options.appPath) : await selectApp();
+  await processApp(options, host, selected);
+};
+
+const processApp = async (
+  options: NonNullable<ReturnType<typeof parseOptions>>,
+  host: Awaited<ReturnType<typeof getHostInfo>>,
+  selected: string,
+) => {
   const source = await resolveApp(selected);
   const excluded = await getExcludedExtensions(source.path, options.keepExtensions, options.excludedExtensions);
   const inspectionArgs = ["--app", source.path];
@@ -317,7 +352,7 @@ const main = async () => {
 
   await writeFile(
     path.join(workspace, "source.json"),
-    JSON.stringify({ ...sourceInspection, selected, host, excluded_extensions: excluded }, null, 2),
+    JSON.stringify({ ...sourceInspection, selected, decrypted_ipa: options.decryptedIpa ? path.resolve(options.decryptedIpa) : null, host, excluded_extensions: excluded }, null, 2),
     { mode: 0o600 },
   );
 
@@ -419,6 +454,7 @@ const main = async () => {
   const manifestPath = path.join(workspace, "manifest.json");
   const manifest = {
     source,
+    decrypted_ipa: options.decryptedIpa ? path.resolve(options.decryptedIpa) : null,
     host,
     core: core ?? null,
     dump_pid: dumpPid ?? null,

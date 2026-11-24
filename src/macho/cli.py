@@ -9,6 +9,7 @@ import stat
 import sys
 from pathlib import Path
 from universal import read_binary, thin_bundle
+from ipa import extract_ipa
 from artifacts import write_json, write_new
 from bundle import configure_bundle
 from catalyst import check_runtime, convert_bundle
@@ -165,6 +166,10 @@ def parse_args() -> argparse.Namespace:
         if command == "inspect-bundle":
             bundle.add_argument("--exclude-extension", action="append", default=[])
 
+    ipa = commands.add_parser("extract-ipa")
+    ipa.add_argument("--ipa", type=Path, required=True)
+    ipa.add_argument("--output-dir", type=Path, required=True)
+
     settings = commands.add_parser("configure-bundle")
     settings.add_argument("--app", type=Path, required=True)
     settings.add_argument("--bundle-id", nargs="?", const="")
@@ -217,6 +222,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 def run_command(args: argparse.Namespace) -> dict:
+    if args.command == "extract-ipa":
+        app = extract_ipa(args.ipa, args.output_dir)
+        inspection = inspect_bundle(app)
+        if inspection["encrypted"]:
+            names = ", ".join(str(Path(binary).relative_to(app)) for binary in inspection["encrypted"])
+            raise MachOError(f"--decrypted-ipa requires decrypted binaries; encrypted: {names}")
+        return {"app": str(app)}
+
     if args.command == "bundle-info":
         return bundle_info(args.app)
 
