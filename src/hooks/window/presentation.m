@@ -29,8 +29,6 @@ static BOOL isApplicationController(id controller, NSUInteger depth) {
     return NO;
 }
 
-// UIModalPresentationOverFullScreen covers the window like a sheet would, without removing the screen underneath.
-// A full-screen presentation would make a tab bar controller disappear and drop its Mac toolbar tabs.
 static const NSInteger inWindowStyle = 5;
 
 static BOOL isSheetStyle(NSInteger style) {
@@ -66,7 +64,6 @@ __attribute__((constructor)) static void installPresentationPolicy(void) {
         originalSetStyle = (void (*)(id, SEL, NSInteger))method_getImplementation(setter);
         originalPresentation = (id (*)(id, SEL))method_getImplementation(getter);
         method_setImplementation(setter, (IMP)setPresentationStyle);
-        // Choose the style before UIKit caches a native sheet presentation controller.
         method_setImplementation(getter, (IMP)presentationController);
     }
 }

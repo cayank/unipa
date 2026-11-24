@@ -32,7 +32,6 @@ __attribute__((constructor)) static void installScreen(void) {
     @autoreleasepool {
         NSSize preferred = unipaPreferredWindowSize();
         if (preferred.width <= 0) return;
-        // UIKit sees one fixed device display; the window keeps the same logical size.
         displaySize = preferred;
         Class screenClass = NSClassFromString(@"UIScreen");
         Method bounds = class_getInstanceMethod(screenClass, NSSelectorFromString(@"bounds"));

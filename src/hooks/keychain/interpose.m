@@ -60,12 +60,10 @@ static OSStatus isolatedGeneratePair(CFDictionaryRef parameters, SecKeyRef *publ
     return errSecSuccess;
 }
 
-// The interposed SecItem functions skip unipa's own image, so Device Info reads the store through this.
 OSStatus unipaKeychainCopyMatching(CFDictionaryRef query, CFTypeRef *result) {
     return isolatedCopyMatching(query, result);
 }
 
-// Called from the unipa menu for the instance in use. Items are deleted per class, as SecItemDelete requires.
 BOOL unipaClearKeychain(void) {
     UnipaKeychainStore *keychain = store();
     if (!keychain) return NO;

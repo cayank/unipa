@@ -304,7 +304,6 @@ static NSDictionary *recordForKey(NSDictionary *attributes, id key) {
     int version = schemaVersion(_db);
     if (version != 0 && version != 2) return errSecIO;
     
-    // DELETE journals inherit the database's 0600 mode and disappear after commit
     if (sqlite3_exec(_db, "PRAGMA foreign_keys=ON; PRAGMA journal_mode=DELETE; PRAGMA secure_delete=ON; BEGIN IMMEDIATE;",
                      NULL, NULL, NULL) != SQLITE_OK) return errSecIO;
     version = schemaVersion(_db);
@@ -543,7 +542,6 @@ failed:
         status = [self open];
         if (status) return status;
         
-        // Persistent references include the store namespace, which is loaded by open
         value = [self resultFor:record options:options status:&status];
         if (!status) status = [self write:attributes identifier:identifier adding:YES];
     }
@@ -651,7 +649,6 @@ failed:
     ephemeral[(__bridge id)kSecPrivateKeyAttrs] = ephemeralAttributes(privateAttributes);
     ephemeral[(__bridge id)kSecPublicKeyAttrs] = ephemeralAttributes(publicAttributes);
     
-    // Calls from this image reach the original API, permanence is handled below
     id privateKey = CFBridgingRelease(SecKeyCreateRandomKey((__bridge CFDictionaryRef)ephemeral, error));
     if (!privateKey) return NULL;
     BOOL savePrivate = flag(privateAttributes, kSecAttrIsPermanent);

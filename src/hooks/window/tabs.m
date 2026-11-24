@@ -11,8 +11,6 @@ static id macStyle(id controller) {
     return [style isKindOfClass:NSClassFromString(@"_UITabBarControllerVisualStyle_Mac")] ? style : nil;
 }
 
-// Catalyst's Mac tab bar style shows tabs in the window toolbar, but it gives up while its segmented control
-// does not exist yet, which in converted apps it never does. Creating it first lets the toolbar appear.
 static void updateToolbar(id style, SEL selector, id window) {
     if (window && ![style valueForKey:@"segmentedControl"]) {
         ((void (*)(id, SEL))objc_msgSend)(style, NSSelectorFromString(@"_updateSegmentedControl"));
@@ -20,7 +18,6 @@ static void updateToolbar(id style, SEL selector, id window) {
     originalUpdateToolbar(style, selector, window);
 }
 
-// A full-screen presentation, such as a sign-in screen, removes the toolbar tabs, and UIKit does not add them back.
 static void viewDidAppear(id controller, SEL selector, BOOL animated) {
     originalViewDidAppear(controller, selector, animated);
     ((void (*)(id, SEL))objc_msgSend)(macStyle(controller), NSSelectorFromString(@"updateTabBarLayout"));

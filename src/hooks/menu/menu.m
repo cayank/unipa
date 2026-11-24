@@ -21,7 +21,6 @@ static void (*originalBuildMenu)(id, SEL, id);
 
 typedef BOOL (*UnipaKeychainReset)(void);
 
-// Isolated Keychain support is compiled in only for apps that use it.
 static UnipaKeychainReset keychainReset(void) {
     return (UnipaKeychainReset)dlsym(RTLD_SELF, "unipaClearKeychain");
 }
@@ -100,7 +99,6 @@ static id locationMenu(void) {
     BOOL simulated = unipaSimulatedCoordinate(&coordinate);
     BOOL available = unipaLocationAvailable();
     NSMutableArray *items = [NSMutableArray arrayWithObject:makeCommand(@"Real Location", @"location.real", !simulated, available)];
-    // UIKit rejects menus with two identical commands, so the current location has its own action.
     if (simulated) [items addObject:makeCommand(coordinateText(coordinate), @"location.current", YES, available)];
     [items addObject:makeCommand(@"Simulate Location…", @"location.set", NO, available)];
     return makeMenu(@"Location", @"unipa.menu.location", 0, items);
@@ -113,7 +111,6 @@ static id keychainMenu(void) {
     NSString *active = unipaActiveKeychainInstance(), *saved = unipaSavedKeychainInstance();
     NSMutableArray *instances = [NSMutableArray array];
     for (NSString *name in unipaKeychainInstances()) {
-        // After choosing Later, the instance still in use stays visible until the app reopens.
         NSString *title = [name isEqualToString:active] && ![name isEqualToString:saved] ? [name stringByAppendingString:@" (in use)"] : name;
         [instances addObject:makeCommand(title, [keychainInstanceAction stringByAppendingString:name], [name isEqualToString:saved], YES)];
     }
@@ -127,12 +124,10 @@ static id keychainMenu(void) {
 }
 
 static id unipaMenu(void) {
-    // What the app renders: layout, appearance, and (when the app ships more than its base) language.
     NSMutableArray *display = [NSMutableArray arrayWithObjects:layoutMenu(), appearanceMenu(), nil];
     id language = languageMenu();
     if (language) [display addObject:language];
 
-    // About, then display, window, identity, tools, and the destructive reset last.
     return makeMenu(@"unipa", menuIdentifier, 0, @[
         makeMenu(@"", @"unipa.menu.about", menuOptionsDisplayInline, @[makeCommand(@"About unipa", @"about", NO, YES)]),
         makeMenu(@"", @"unipa.menu.display", menuOptionsDisplayInline, display),
@@ -145,7 +140,6 @@ static id unipaMenu(void) {
             makeCommand(@"Device Info", @"data.device", NO, YES),
             makeCommand(@"Show App Data in Finder", @"data.show", NO, YES),
         ]),
-        // Destructive commands stay apart from the others.
         makeMenu(@"", @"unipa.menu.reset", menuOptionsDisplayInline, @[makeCommand(@"Reset App…", @"data.reset", NO, YES)]),
     ]);
 }
@@ -159,7 +153,6 @@ static void buildMenu(id application, SEL selector, id builder) {
         ((void (*)(id, SEL, NSString *, id))objc_msgSend)(builder, NSSelectorFromString(@"replaceMenuForIdentifier:withMenu:"), menuIdentifier, unipaMenu());
         return;
     }
-    // Apps may remove standard menus, so fall back to the Window menu.
     for (NSString *anchor in @[@"com.apple.menu.help", @"com.apple.menu.window"]) {
         if (!((id (*)(id, SEL, NSString *))objc_msgSend)(builder, find, anchor)) continue;
         ((void (*)(id, SEL, id, NSString *))objc_msgSend)(builder, NSSelectorFromString(@"insertSiblingMenu:afterMenuForIdentifier:"), unipaMenu(), anchor);
@@ -172,10 +165,6 @@ static void rebuildMenu(void) {
     ((void (*)(id, SEL))objc_msgSend)(mainSystem, NSSelectorFromString(@"setNeedsRebuild"));
 }
 
-// iOS apps save their state on entering the background, since the system may stop them at any time after that.
-// Catalyst then waits up to 30 seconds for background tasks, so unipa exits once the app has had a moment to save.
-// The main queue is blocked while AppKit waits to terminate, so the timer runs on a background queue.
-// beforeExit runs after the app has saved its state, so data it writes while quitting can still be removed.
 static void quitApplication(dispatch_block_t beforeExit) {
     [NSNotificationCenter.defaultCenter addObserverForName:@"UIApplicationDidEnterBackgroundNotification" object:nil
                                                      queue:nil usingBlock:^(__unused NSNotification *notification) {
@@ -193,8 +182,6 @@ static void selectLayout(UnipaLayout layout) {
     unipaSaveLayout(layout);
     if (layout == unipaActiveLayout()) return;
 
-    // Catalyst apps run one instance and the sandbox blocks helpers, so the app cannot reopen itself.
-    // Switching now resizes the running scene, but views sized at launch may keep the old layout.
     NSAlert *alert = [NSAlert new];
     alert.messageText = [NSString stringWithFormat:@"Switch to the %@ layout?", layout == UnipaLayoutPad ? @"iPad" : @"iPhone"];
     alert.informativeText = [NSString stringWithFormat:@"Quit and reopen %@ for the best result, or switch now. "
@@ -246,7 +233,6 @@ static NSButton *checkbox(NSString *title, BOOL on, BOOL enabled) {
 }
 
 static void resetApp(void) {
-    // A sandboxed app's home directory is its container; outside a container this would be the user's home.
     NSString *container = NSHomeDirectory();
     if (![container containsString:@"/Library/Containers/"]) return;
     UnipaKeychainReset reset = keychainReset();
@@ -254,7 +240,6 @@ static void resetApp(void) {
     NSButton *keychain = checkbox(reset ? [NSString stringWithFormat:@"Keychain (“%@”)", instance] : @"Keychain (needs isolated storage)", reset != NULL, reset != NULL);
     NSButton *preferences = checkbox(@"Preferences, including saved addresses and device IDs", YES, YES);
     NSButton *caches = checkbox(@"Caches", YES, YES);
-    // Everything is selected by default: SDKs restore IDs from their own files, so a partial reset can look like no reset.
     NSButton *files = checkbox(@"All app files, such as documents and databases", YES, YES);
     NSStackView *options = [NSStackView stackViewWithViews:@[keychain, preferences, caches, files]];
     options.orientation = NSUserInterfaceLayoutOrientationVertical;
@@ -280,7 +265,6 @@ static void resetApp(void) {
 }
 
 static void showApplicationData(void) {
-    // A sandboxed app's home directory is its container.
     [NSWorkspace.sharedWorkspace activateFileViewerSelectingURLs:@[[NSURL fileURLWithPath:NSHomeDirectory()]]];
 }
 
@@ -311,7 +295,6 @@ static void selectKeychainInstance(NSString *name) {
 
     if ([name isEqualToString:unipaActiveKeychainInstance()]) return;
     
-    // The app keeps sign-ins in memory, so it reads the other Keychain only after reopening.
     NSAlert *alert = [NSAlert new];
     alert.messageText = [NSString stringWithFormat:@"Switch to the “%@” Keychain?", name];
     alert.informativeText = [NSString stringWithFormat:@"%@ will use it the next time it opens. Preferences and files stay shared between Keychains.", applicationName()];
@@ -341,7 +324,6 @@ static void clearKeychain(void) {
     [alert addButtonWithTitle:@"Clear and Quit"].hasDestructiveAction = YES;
     [alert addButtonWithTitle:@"Cancel"];
     if ([alert runModal] != NSAlertFirstButtonReturn) return;
-    // The app keeps sign-ins in memory, so it quits to stop using the deleted items.
     if (reset()) quitApplication(^{ reset(); });
     else showMessage(@"Could not clear the Keychain", @"Some Keychain items could not be deleted.");
 }
@@ -361,7 +343,6 @@ static void showAbout(void) {
     showMessage([NSString stringWithFormat:@"unipa %@", info[@"UnipaVersion"] ?: @""], [lines componentsJoinedByString:@"\n"]);
 }
 
-// Foundation reads the language at launch, so a change applies the next time the app opens.
 static void selectLanguage(NSString *code) {
     NSString *current = unipaSavedLanguage();
     if ((code == nil && current == nil) || [code isEqualToString:current]) return;
@@ -422,7 +403,6 @@ __attribute__((constructor)) static void installMenu(void) {
         Method method = class_getInstanceMethod(application, build);
         if (!method) return;
         
-        // UIApplication passes the builder on to the app delegate, so unipa adds its menu last.
         originalBuildMenu = (void (*)(id, SEL, id))method_getImplementation(method);
         if (!class_addMethod(application, build, (IMP)buildMenu, method_getTypeEncoding(method))) {
             method_setImplementation(method, (IMP)buildMenu);

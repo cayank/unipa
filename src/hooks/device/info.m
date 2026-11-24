@@ -29,7 +29,6 @@ static NSString *advertisingIdentifier(void) {
     return index < statuses.count ? [NSString stringWithFormat:@"%@ (tracking %@)", identifier, statuses[index]] : identifier;
 }
 
-// Shows readable values as text; binary data such as keys appears only as its size.
 static NSString *readableValue(NSData *data) {
     if (![data isKindOfClass:NSData.class]) return @"—";
     NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
@@ -41,7 +40,6 @@ static NSString *readableValue(NSData *data) {
 
 typedef OSStatus (*UnipaCopyMatching)(CFDictionaryRef, CFTypeRef *);
 
-// dyld interposing skips the image that declares it, so unipa reads its isolated store directly.
 static OSStatus copyItems(id itemClass, NSArray **items) {
     UnipaCopyMatching isolated = (UnipaCopyMatching)dlsym(RTLD_SELF, "unipaKeychainCopyMatching");
     NSDictionary *query = @{
@@ -52,7 +50,6 @@ static OSStatus copyItems(id itemClass, NSArray **items) {
         (__bridge id)kSecUseDataProtectionKeychain: @YES,
     };
     CFTypeRef result = NULL;
-    // The data protection Keychain is scoped to the app; the file-based one would also list other apps' items.
     OSStatus status = (isolated ?: SecItemCopyMatching)((__bridge CFDictionaryRef)query, &result);
     *items = CFBridgingRelease(result);
     return status;
