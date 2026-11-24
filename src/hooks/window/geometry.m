@@ -5,7 +5,6 @@
 #import "layout/screen.h"
 #import "window/geometry.h"
 
-// Catalyst draws iPhone and iPad scenes at 77% of their UIKit size.
 static const CGFloat defaultSceneScale = 0.77;
 static BOOL layoutScheduled;
 
@@ -16,7 +15,6 @@ static id sharedApplication(void) {
     return ((id (*)(id, SEL))objc_msgSend)(applicationClass, selector);
 }
 
-// Largest size with the preferred aspect ratio whose window fits the visible screen.
 static NSSize fittedSceneSize(NSSize preferred, NSSize available, CGFloat scale) {
     if (preferred.width <= 0 || preferred.height <= 0) return NSZeroSize;
     if (!(scale > 0) || available.width <= 0 || available.height <= 0) return preferred;
@@ -48,12 +46,10 @@ static CGFloat sceneScale(NSWindow *window, id scene) {
     CGFloat width = [window contentRectForFrameRect:window.frame].size.width;
     if (bounds.size.width <= 0 || width <= 0) return defaultSceneScale;
     CGFloat scale = width / bounds.size.width;
-    // Rounded window sizes make the measured ratio slightly inexact.
     if (fabs(scale - defaultSceneScale) < 0.02) return defaultSceneScale;
     return scale > 0.25 && scale < 4 ? scale : defaultSceneScale;
 }
 
-// Catalyst rounds the scene up from whole window points, so pick the point length closest to the target.
 static CGFloat windowLength(CGFloat target, CGFloat scale) {
     CGFloat lower = floor(target * scale);
     CGFloat upper = ceil(target * scale);
@@ -66,8 +62,6 @@ static NSSize windowContentSize(NSSize target, CGFloat scale) {
     return NSMakeSize(windowLength(target.width, scale), windowLength(target.height, scale));
 }
 
-// Catalyst saves and restores the window position itself, so unipa only fixes the size.
-// Keeps the top-left corner in place and the whole window on the visible screen.
 static NSRect windowFrame(NSRect current, NSSize size, NSRect visible) {
     NSRect frame = NSMakeRect(NSMinX(current), NSMaxY(current) - size.height, size.width, size.height);
     frame.origin.x = MAX(NSMinX(visible), MIN(NSMinX(frame), NSMaxX(visible) - size.width));
@@ -76,6 +70,7 @@ static NSRect windowFrame(NSRect current, NSSize size, NSRect visible) {
 }
 
 static void applyWindowGeometry(void) {
+    unipaRefreshActiveLayout();
     NSArray *scenes = unipaWindowScenes();
     if (!scenes.count) return;
     NSWindow *window = unipaMainWindow();
@@ -88,7 +83,6 @@ static void applyWindowGeometry(void) {
     for (id scene in scenes) {
         id restrictions = [scene valueForKey:@"sizeRestrictions"];
         if (!restrictions) continue;
-        // Equal limits give the scene a fixed size, so every display gets the same layout.
         if (![[restrictions valueForKey:@"minimumSize"] isEqual:size]) [restrictions setValue:size forKey:@"minimumSize"];
         if (![[restrictions valueForKey:@"maximumSize"] isEqual:size]) [restrictions setValue:size forKey:@"maximumSize"];
         if ([restrictions respondsToSelector:NSSelectorFromString(@"setAllowsFullScreen:")]) {
@@ -102,7 +96,6 @@ static void applyWindowGeometry(void) {
         NSSize size = [window frameRectForContentRect:NSMakeRect(0, 0, content.width, content.height)].size;
         [window setFrame:windowFrame(window.frame, size, screen.visibleFrame) display:YES];
     }
-    // Report the scene size UIKit actually uses, so screen-sized views match the window.
     NSRect scene = [[[scenes.firstObject valueForKey:@"coordinateSpace"] valueForKey:@"bounds"] rectValue];
     if (fabs(scene.size.width - target.width) <= 2 && fabs(scene.size.height - target.height) <= 2) {
         unipaSetDisplaySize(scene.size);

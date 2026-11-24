@@ -11,3 +11,4 @@ void unipaSetActiveLayout(UnipaLayout layout);
 UnipaLayout unipaSavedLayout(void);
 void unipaSaveLayout(UnipaLayout layout);
 NSSize unipaPreferredWindowSize(void);
+void unipaRefreshActiveLayout(void);

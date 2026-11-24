@@ -1,4 +1,5 @@
 #import "layout/layout.h"
+#import "settings/settings.h"
 
 static NSString *const layoutKey = @"UnipaLayout";
 
@@ -26,28 +27,41 @@ NSSize unipaLayoutSize(UnipaLayout layout) {
 }
 
 UnipaLayout unipaSavedLayout(void) {
-    NSString *saved = [NSUserDefaults.standardUserDefaults stringForKey:layoutKey];
-    return [saved isEqualToString:@"ipad"] ? UnipaLayoutPad : UnipaLayoutPhone;
+    id saved = unipaSettingValue(layoutKey);
+    return [saved isEqual:@"ipad"] ? UnipaLayoutPad : UnipaLayoutPhone;
 }
 
 void unipaSaveLayout(UnipaLayout layout) {
-    [NSUserDefaults.standardUserDefaults setObject:layout == UnipaLayoutPad ? @"ipad" : @"iphone" forKey:layoutKey];
+    unipaSetSettingValue(layoutKey, layout == UnipaLayoutPad ? @"ipad" : @"iphone");
 }
 
 static UnipaLayout activeLayout;
+static BOOL activeLayoutOverridden;
 
-// The saved layout applies at launch; switching now changes only the running app.
+static UnipaLayout layoutFromDefaults(void) {
+    return unipaSavedLayout() == UnipaLayoutPad && unipaLayoutSize(UnipaLayoutPad).width > 0 ? UnipaLayoutPad : UnipaLayoutPhone;
+}
+
 UnipaLayout unipaActiveLayout(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        activeLayout = unipaSavedLayout() == UnipaLayoutPad && unipaLayoutSize(UnipaLayoutPad).width > 0 ? UnipaLayoutPad : UnipaLayoutPhone;
+        activeLayout = layoutFromDefaults();
     });
     return activeLayout;
 }
 
 void unipaSetActiveLayout(UnipaLayout layout) {
     unipaActiveLayout();
-    if (unipaLayoutSize(layout).width > 0) activeLayout = layout;
+    if (unipaLayoutSize(layout).width <= 0) return;
+    activeLayout = layout;
+    activeLayoutOverridden = YES;
+}
+
+void unipaRefreshActiveLayout(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        if (!activeLayoutOverridden) activeLayout = layoutFromDefaults();
+    });
 }
 
 NSSize unipaPreferredWindowSize(void) {

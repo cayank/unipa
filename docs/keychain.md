@@ -27,7 +27,7 @@ Apps still generate their own identifiers. Isolating Keychain storage does not r
 
 Use **unipa → Keychain** to select an instance or create one with **New Instance…**. Changes apply after restarting. **Clear** deletes the active instance's records and quits the app.
 
-Apps start with the `default` instance. Menu selections are saved in app preferences.
+Apps start with the `default` instance. Menu selections are saved in unipa's own settings file (`~/Library/Application Support/unipa/Settings/<bundle-id>/settings.plist`), not the app's own preferences.
 
 Preferences and files remain shared, so switching Keychains may not switch every account-related value. Apps often keep device IDs and addresses in preferences, which **unipa → Reset App…** clears.
 

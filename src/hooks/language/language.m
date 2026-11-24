@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import "language/language.h"
+#import "settings/settings.h"
 
 static NSString *const languageKey = @"UnipaLanguage";
 static NSString *const appleLanguagesKey = @"AppleLanguages";
@@ -13,19 +14,17 @@ NSArray<NSString *> *unipaSupportedLanguages(void) {
 }
 
 NSString *unipaSavedLanguage(void) {
-    NSString *code = [NSUserDefaults.standardUserDefaults stringForKey:languageKey];
+    id code = unipaSettingValue(languageKey);
     return [unipaSupportedLanguages() containsObject:code] ? code : nil;
 }
 
 void unipaSaveLanguage(NSString *code) {
     if (![unipaSupportedLanguages() containsObject:code]) return;
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    [defaults setObject:code forKey:languageKey];
-    [defaults setObject:@[code] forKey:appleLanguagesKey];
+    unipaSetSettingValue(languageKey, code);
+    [NSUserDefaults.standardUserDefaults setObject:@[code] forKey:appleLanguagesKey];
 }
 
 void unipaUseSystemLanguage(void) {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    [defaults removeObjectForKey:languageKey];
-    [defaults removeObjectForKey:appleLanguagesKey];
+    unipaRemoveSetting(languageKey);
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:appleLanguagesKey];
 }

@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #import "layout/layout.h"
+#import "settings/settings.h"
 #import "window/geometry.h"
 #import "window/style.h"
 
@@ -12,21 +13,20 @@ static NSAppearance *originalAppearance;
 static BOOL overridingAppearance;
 
 UnipaAppearance unipaAppearance(void) {
-    NSString *saved = [NSUserDefaults.standardUserDefaults stringForKey:appearanceKey];
-    if ([saved isEqualToString:@"light"]) return UnipaAppearanceLight;
-    if ([saved isEqualToString:@"dark"]) return UnipaAppearanceDark;
+    id saved = unipaSettingValue(appearanceKey);
+    if ([saved isEqual:@"light"]) return UnipaAppearanceLight;
+    if ([saved isEqual:@"dark"]) return UnipaAppearanceDark;
     return UnipaAppearanceSystem;
 }
 
 BOOL unipaKeepsOnTop(void) {
-    return [NSUserDefaults.standardUserDefaults boolForKey:keepOnTopKey];
+    return [unipaSettingValue(keepOnTopKey) boolValue];
 }
 
 BOOL unipaHidesTitleBar(void) {
-    return [NSUserDefaults.standardUserDefaults boolForKey:hideTitleBarKey];
+    return [unipaSettingValue(hideTitleBarKey) boolValue];
 }
 
-// Apps may set their own style, so unipa keeps it and puts it back when System is chosen.
 static void applyAppearance(UnipaAppearance appearance) {
     BOOL system = appearance == UnipaAppearanceSystem;
     if (!system && !overridingAppearance) originalAppearance = NSApp.appearance;
@@ -35,7 +35,6 @@ static void applyAppearance(UnipaAppearance appearance) {
             [NSAppearance appearanceNamed:appearance == UnipaAppearanceDark ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua];
     }
     overridingAppearance = !system;
-    // UIKit windows follow overrideUserInterfaceStyle, whose values match UnipaAppearance.
     for (id scene in unipaWindowScenes()) {
         for (id window in [scene valueForKey:@"windows"]) {
             NSNumber *original = objc_getAssociatedObject(window, &originalStyleKey);
@@ -60,17 +59,17 @@ static void applyWindowStyle(void) {
 void unipaSetAppearance(UnipaAppearance appearance) {
     NSArray *names = @[@"system", @"light", @"dark"];
     if (appearance < 0 || appearance >= (NSInteger)names.count) return;
-    [NSUserDefaults.standardUserDefaults setObject:names[appearance] forKey:appearanceKey];
+    unipaSetSettingValue(appearanceKey, names[appearance]);
     applyWindowStyle();
 }
 
 void unipaSetKeepsOnTop(BOOL enabled) {
-    [NSUserDefaults.standardUserDefaults setBool:enabled forKey:keepOnTopKey];
+    unipaSetSettingValue(keepOnTopKey, @(enabled));
     applyWindowStyle();
 }
 
 void unipaSetHidesTitleBar(BOOL hidden) {
-    [NSUserDefaults.standardUserDefaults setBool:hidden forKey:hideTitleBarKey];
+    unipaSetSettingValue(hideTitleBarKey, @(hidden));
     applyWindowStyle();
 }
 

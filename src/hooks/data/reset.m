@@ -1,20 +1,18 @@
 #import <dlfcn.h>
 #import "data/reset.h"
+#import "settings/settings.h"
 
 static NSString *const pendingResetKey = @"UnipaPendingReset";
 
-// unipa's own settings and the window position survive a reset.
 static NSArray<NSString *> *keptPreferencePrefixes(void) {
     return @[@"Unipa", @"NSWindow Frame"];
 }
 
 static BOOL isSymbolicLink(NSString *path) {
-    // attributesOfItemAtPath: describes the link itself instead of its target.
     NSString *type = [NSFileManager.defaultManager attributesOfItemAtPath:path error:NULL].fileType;
     return [type isEqualToString:NSFileTypeSymbolicLink];
 }
 
-// Sandbox containers link to the user's real folders, so links are never followed or removed.
 static void removeContents(NSString *folder, NSSet<NSString *> *kept) {
     if (isSymbolicLink(folder)) return;
     for (NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:folder error:NULL]) {
@@ -34,7 +32,6 @@ static void resetPreferences(NSString *container, NSString *domain) {
         }
     }
     [defaults setPersistentDomain:kept forName:domain];
-    // SDKs such as Firebase keep their own preference files next to the app's.
     NSString *folder = [container stringByAppendingPathComponent:@"Library/Preferences"];
     for (NSString *file in [NSFileManager.defaultManager contentsOfDirectoryAtPath:folder error:NULL]) {
         NSString *suite = file.stringByDeletingPathExtension;
@@ -47,7 +44,6 @@ static void resetPreferences(NSString *container, NSString *domain) {
 void unipaResetAppData(NSString *container, NSString *domain, UnipaResetItems items) {
     if (!container.length || !domain.length) return;
     if (items & UnipaResetKeychain) {
-        // Isolated Keychain support is compiled in only for apps that use it.
         BOOL (*clear)(void) = (BOOL (*)(void))dlsym(RTLD_SELF, "unipaClearKeychain");
         if (clear) clear();
     }
@@ -59,24 +55,19 @@ void unipaResetAppData(NSString *container, NSString *domain, UnipaResetItems it
     }
     if (items & UnipaResetFiles) {
         removeContents([container stringByAppendingPathComponent:@"Documents"], [NSSet set]);
-        // Preferences and caches have their own options, and Application Scripts belongs to the system.
         removeContents(library, [NSSet setWithObjects:@"Preferences", @"Caches", @"Application Scripts", nil]);
     }
 }
 
 void unipaScheduleReset(UnipaResetItems items) {
-    [NSUserDefaults.standardUserDefaults setInteger:(NSInteger)items forKey:pendingResetKey];
-    [NSUserDefaults.standardUserDefaults synchronize];
+    unipaSetSettingValue(pendingResetKey, @(items));
 }
 
-// Apps write their preferences back while quitting, so the reset runs at the next launch, before the app's code.
 __attribute__((constructor)) static void applyPendingReset(void) {
     @autoreleasepool {
-        NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-        UnipaResetItems items = (UnipaResetItems)[defaults integerForKey:pendingResetKey];
+        UnipaResetItems items = (UnipaResetItems)[unipaSettingValue(pendingResetKey) integerValue];
         if (!items) return;
-        [defaults removeObjectForKey:pendingResetKey];
-        // A sandboxed app's home directory is its container; outside a container this would be the user's home.
+        unipaRemoveSetting(pendingResetKey);
         NSString *container = NSHomeDirectory();
         if ([container containsString:@"/Library/Containers/"]) unipaResetAppData(container, NSBundle.mainBundle.bundleIdentifier, items);
     }

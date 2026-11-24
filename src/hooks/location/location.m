@@ -3,14 +3,13 @@
 #import <objc/runtime.h>
 #import "layout/layout.h"
 #import "location/location.h"
+#import "settings/settings.h"
 
-// CoreLocation is not linked, so ARC learns the initializer from this declaration.
 @interface NSObject (UnipaLocation)
 - (instancetype)initWithLatitude:(double)latitude longitude:(double)longitude;
 @end
 
 static NSString *const locationKey = @"UnipaLocation";
-// CLAuthorizationStatus.authorizedWhenInUse
 static const int authorizedWhenInUse = 4;
 static NSMutableDictionary<NSString *, NSValue *> *originals;
 static NSHashTable *updatingManagers;
@@ -24,7 +23,8 @@ BOOL unipaLocationAvailable(void) {
 }
 
 BOOL unipaSimulatedCoordinate(UnipaCoordinate *coordinate) {
-    NSDictionary *saved = [NSUserDefaults.standardUserDefaults dictionaryForKey:locationKey];
+    id saved = unipaSettingValue(locationKey);
+    if (![saved isKindOfClass:NSDictionary.class]) return NO;
     id latitude = saved[@"latitude"], longitude = saved[@"longitude"];
     if (![latitude isKindOfClass:NSNumber.class] || ![longitude isKindOfClass:NSNumber.class]) return NO;
     if (!validCoordinate([latitude doubleValue], [longitude doubleValue])) return NO;
@@ -32,7 +32,6 @@ BOOL unipaSimulatedCoordinate(UnipaCoordinate *coordinate) {
     return YES;
 }
 
-// Accepts "41.0082, 28.9784", the format map apps copy.
 BOOL unipaParseCoordinate(NSString *text, UnipaCoordinate *coordinate) {
     NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@", \t\n"];
     NSMutableArray<NSNumber *> *values = [NSMutableArray array];
@@ -102,7 +101,6 @@ static void requestLocation(id manager, SEL selector) {
     else ((void (*)(id, SEL))original(NO, selector))(manager, selector);
 }
 
-// A simulated location needs no permission, so the app sees location access as granted.
 static void requestAuthorization(id manager, SEL selector) {
     if (unipaSimulatedCoordinate(NULL)) notifyAuthorization(manager);
     else ((void (*)(id, SEL))original(NO, selector))(manager, selector);
@@ -120,7 +118,6 @@ static BOOL servicesEnabled(id managerClass, SEL selector) {
     return unipaSimulatedCoordinate(NULL) || ((BOOL (*)(id, SEL))original(YES, selector))(managerClass, selector);
 }
 
-// Running managers switch between the simulated and the real location without restarting.
 static void refreshManagers(void) {
     BOOL simulated = unipaSimulatedCoordinate(NULL);
     SEL start = NSSelectorFromString(@"startUpdatingLocation");
@@ -132,12 +129,12 @@ static void refreshManagers(void) {
 
 void unipaSimulateLocation(UnipaCoordinate coordinate) {
     if (!validCoordinate(coordinate.latitude, coordinate.longitude)) return;
-    [NSUserDefaults.standardUserDefaults setObject:@{@"latitude": @(coordinate.latitude), @"longitude": @(coordinate.longitude)} forKey:locationKey];
+    unipaSetSettingValue(locationKey, @{@"latitude": @(coordinate.latitude), @"longitude": @(coordinate.longitude)});
     refreshManagers();
 }
 
 void unipaUseRealLocation(void) {
-    [NSUserDefaults.standardUserDefaults removeObjectForKey:locationKey];
+    unipaRemoveSetting(locationKey);
     refreshManagers();
 }
 

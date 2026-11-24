@@ -1,4 +1,5 @@
 #import "keychain/instances.h"
+#import "settings/settings.h"
 #include <pwd.h>
 #include <unistd.h>
 
@@ -10,7 +11,6 @@ static BOOL validBundleIdentifier(id value) {
     return ![value hasPrefix:@"."] && [value rangeOfCharacterFromSet:allowed.invertedSet].location == NSNotFound;
 }
 
-// Matches the converter's instance names after lowercasing: 1–64 letters, digits, dots, underscores, or hyphens.
 BOOL unipaValidKeychainInstance(NSString *name) {
     if (![name isKindOfClass:NSString.class]) return NO;
     return [[NSPredicate predicateWithFormat:@"SELF MATCHES %@", @"[a-z0-9][a-z0-9._-]{0,63}"] evaluateWithObject:name];
@@ -28,7 +28,6 @@ NSString *unipaKeychainDirectory(void) {
     dispatch_once(&once, ^{
         NSDictionary *keychain = configuration();
         if (!keychain) return;
-        // A sandboxed home directory is the app container, so read the real one.
         struct passwd user, *found = NULL;
         char buffer[16384];
         if (getpwuid_r(getuid(), &user, buffer, sizeof(buffer), &found) || !found) return;
@@ -40,16 +39,15 @@ NSString *unipaKeychainDirectory(void) {
 
 NSString *unipaSavedKeychainInstance(void) {
     if (!unipaKeychainDirectory()) return nil;
-    NSString *saved = [NSUserDefaults.standardUserDefaults stringForKey:instanceKey];
+    id saved = unipaSettingValue(instanceKey);
     return unipaValidKeychainInstance(saved) ? saved : configuration()[@"Instance"];
 }
 
 void unipaSaveKeychainInstance(NSString *name) {
     if (!unipaKeychainDirectory() || !unipaValidKeychainInstance(name)) return;
-    [NSUserDefaults.standardUserDefaults setObject:name forKey:instanceKey];
+    unipaSetSettingValue(instanceKey, name);
 }
 
-// Apps keep sign-ins in memory, so another instance applies the next time the app opens.
 NSString *unipaActiveKeychainInstance(void) {
     static NSString *instance;
     static dispatch_once_t once;
