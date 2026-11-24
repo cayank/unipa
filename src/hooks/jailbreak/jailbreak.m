@@ -22,7 +22,10 @@ static BOOL looksLikeJailbreak(const char *path) {
         "sileo", "Sileo", "electra", "undecimus", "dpkg", "/usr/sbin/sshd", "/usr/bin/ssh",
         "/usr/libexec/ssh-keysign", "/usr/libexec/sftp-server", "ssh/sshd_config", "/var/lib/apt",
         "/var/lib/cydia", "/var/cache/apt", "/var/stash", "/.cydia_no_stash", "libjailbreak",
-        "MobileSubstrate", "TweakInject", "/var/jb", "/private/var/jb", NULL,
+        "MobileSubstrate", "TweakInject", "/var/jb", "/private/var/jb",
+        "checkra1n.app", "blackra1n.app", "FakeCarrier.app", "Icy.app", "IntelliScreen.app",
+        "MxTube.app", "RockApp.app", "SBSettings.app", "WinterBoard.app", "Palera1n.app",
+        "Zebra.app", "TrollStore.app", NULL,
     };
     for (int i = 0; needles[i]; i++) {
         if (strstr(path, needles[i])) return YES;
