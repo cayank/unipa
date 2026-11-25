@@ -129,7 +129,7 @@ static id unipaMenu(void) {
     if (language) [display addObject:language];
 
     return makeMenu(@"unipa", menuIdentifier, 0, @[
-        makeMenu(@"", @"unipa.menu.about", menuOptionsDisplayInline, @[makeCommand(@"About unipa", @"about", NO, YES)]),
+        makeMenu(@"", @"unipa.menu.about", menuOptionsDisplayInline, @[makeCommand(@"About", @"about", NO, YES)]),
         makeMenu(@"", @"unipa.menu.display", menuOptionsDisplayInline, display),
         makeMenu(@"", @"unipa.menu.window", menuOptionsDisplayInline, @[
             makeCommand(@"Keep on Top", @"window.top", unipaKeepsOnTop(), YES),
@@ -274,9 +274,13 @@ static void showDeviceInfo(void) {
     text.string = unipaDeviceReport();
     text.editable = NO;
     text.font = [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightRegular];
-    text.autoresizingMask = NSViewWidthSizable;
+    text.textContainer.widthTracksTextView = NO;
+    text.textContainer.containerSize = NSMakeSize(FLT_MAX, FLT_MAX);
+    text.horizontallyResizable = YES;
+    text.maxSize = NSMakeSize(FLT_MAX, FLT_MAX);
     scroll.documentView = text;
     scroll.hasVerticalScroller = YES;
+    scroll.hasHorizontalScroller = YES;
     scroll.borderType = NSBezelBorder;
     NSAlert *alert = [NSAlert new];
     alert.messageText = @"Device Info";
@@ -328,19 +332,43 @@ static void clearKeychain(void) {
     else showMessage(@"Could not clear the Keychain", @"Some Keychain items could not be deleted.");
 }
 
+static NSString *alignedFields(NSArray<NSArray<NSString *> *> *fields) {
+    NSUInteger width = 0;
+    for (NSArray<NSString *> *field in fields) width = MAX(width, field[0].length);
+    NSMutableArray *lines = [NSMutableArray array];
+    for (NSArray<NSString *> *field in fields) {
+        NSString *padding = [@"" stringByPaddingToLength:width - field[0].length withString:@" " startingAtIndex:0];
+        [lines addObject:[NSString stringWithFormat:@"%@%@: %@", padding, field[0], field[1]]];
+    }
+    return [lines componentsJoinedByString:@"\n"];
+}
+
 static void showAbout(void) {
     NSDictionary *info = NSBundle.mainBundle.infoDictionary;
     NSString *keychain = unipaActiveKeychainInstance();
     UnipaCoordinate coordinate;
-    NSArray *lines = @[
-        [NSString stringWithFormat:@"App: %@ %@", applicationName(), info[@"CFBundleShortVersionString"] ?: @""],
-        [NSString stringWithFormat:@"Bundle ID: %@", NSBundle.mainBundle.bundleIdentifier],
-        [NSString stringWithFormat:@"Layout: %@", layoutTitle(unipaActiveLayout())],
-        [NSString stringWithFormat:@"Keychain: %@", keychain ? [NSString stringWithFormat:@"Isolated (%@)", keychain] : @"Native"],
-        [NSString stringWithFormat:@"Location: %@", unipaSimulatedCoordinate(&coordinate) ? coordinateText(coordinate) : @"Real"],
-        [NSString stringWithFormat:@"Language: %@", unipaSavedLanguage() ? languageTitle(unipaSavedLanguage()) : @"System"],
-    ];
-    showMessage([NSString stringWithFormat:@"unipa %@", info[@"UnipaVersion"] ?: @""], [lines componentsJoinedByString:@"\n"]);
+    NSString *report = alignedFields(@[
+        @[@"App", [NSString stringWithFormat:@"%@ %@", applicationName(), info[@"CFBundleShortVersionString"] ?: @""]],
+        @[@"Bundle ID", NSBundle.mainBundle.bundleIdentifier ?: @""],
+        @[@"Layout", layoutTitle(unipaActiveLayout())],
+        @[@"Language", unipaSavedLanguage() ? languageTitle(unipaSavedLanguage()) : @"System"],
+        @[@"Location", unipaSimulatedCoordinate(&coordinate) ? coordinateText(coordinate) : @"Real"],
+        @[@"Keychain", keychain ? [NSString stringWithFormat:@"Isolated (%@)", keychain] : @"Native"],
+    ]);
+
+    NSTextView *text = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 360, 110)];
+    text.string = report;
+    text.editable = NO;
+    text.font = [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightRegular];
+
+    NSAlert *alert = [NSAlert new];
+    alert.messageText = [NSString stringWithFormat:@"%@ — unipa %@", applicationName(), info[@"UnipaVersion"] ?: @""];
+    alert.accessoryView = text;
+    [alert addButtonWithTitle:@"Copy"];
+    [alert addButtonWithTitle:@"Close"];
+    if ([alert runModal] != NSAlertFirstButtonReturn) return;
+    [NSPasteboard.generalPasteboard clearContents];
+    [NSPasteboard.generalPasteboard setString:report forType:NSPasteboardTypeString];
 }
 
 static void selectLanguage(NSString *code) {

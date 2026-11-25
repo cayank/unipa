@@ -66,23 +66,37 @@ static NSArray<NSString *> *keychainLines(void) {
         for (NSDictionary *item in items) {
             NSString *name = item[(__bridge id)kSecAttrService] ?: item[(__bridge id)kSecAttrServer] ?: @"";
             NSString *account = item[(__bridge id)kSecAttrAccount] ?: @"";
-            [lines addObject:[NSString stringWithFormat:@"  %@ / %@\n    %@", name, account, readableValue(item[(__bridge id)kSecValueData])]];
+            [lines addObject:[NSString stringWithFormat:@"  %@ / %@\n  └── %@", name, account, readableValue(item[(__bridge id)kSecValueData])]];
         }
     }
     return lines.count ? lines : @[@"  no items"];
 }
 
+static NSString *alignedFields(NSArray<NSArray<NSString *> *> *fields) {
+    NSUInteger width = 0;
+    for (NSArray<NSString *> *field in fields) width = MAX(width, field[0].length);
+    NSMutableArray *lines = [NSMutableArray array];
+    for (NSArray<NSString *> *field in fields) {
+        NSString *padding = [@"" stringByPaddingToLength:width - field[0].length withString:@" " startingAtIndex:0];
+        [lines addObject:[NSString stringWithFormat:@"%@%@: %@", padding, field[0], field[1]]];
+    }
+    return [lines componentsJoinedByString:@"\n"];
+}
+
 NSString *unipaDeviceReport(void) {
     id device = classMessage(@"UIDevice", @"currentDevice");
+    NSString *header = alignedFields(@[
+        @[@"Vendor ID (IDFV)", [[device valueForKey:@"identifierForVendor"] UUIDString] ?: @"unavailable"],
+        @[@"Advertising ID (IDFA)", advertisingIdentifier()],
+        @[@"Device", [NSString stringWithFormat:@"%@, %@ %@", [device valueForKey:@"model"] ?: @"unknown",
+            [device valueForKey:@"systemName"] ?: @"", [device valueForKey:@"systemVersion"] ?: @""]],
+        @[@"Mac", hardwareModel()],
+    ]);
     NSArray *lines = @[
-        [NSString stringWithFormat:@"Vendor ID (IDFV): %@", [[device valueForKey:@"identifierForVendor"] UUIDString] ?: @"unavailable"],
-        [NSString stringWithFormat:@"Advertising ID (IDFA): %@", advertisingIdentifier()],
-        [NSString stringWithFormat:@"Device: %@, %@ %@", [device valueForKey:@"model"] ?: @"unknown",
-            [device valueForKey:@"systemName"] ?: @"", [device valueForKey:@"systemVersion"] ?: @""],
-        [NSString stringWithFormat:@"Mac: %@", hardwareModel()],
+        header,
         @"",
         @"Keychain items (service / account, value):",
-        [keychainLines() componentsJoinedByString:@"\n"],
+        [keychainLines() componentsJoinedByString:@"\n\n"],
     ];
     return [lines componentsJoinedByString:@"\n"];
 }

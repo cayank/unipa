@@ -68,7 +68,7 @@ Settings in the **unipa** menu are saved per app. Appearance, location, and wind
 
 | Item | What it does |
 |---|---|
-| About unipa | Shows the unipa version, bundle ID, layout, Keychain mode, and location |
+| About | Shows the unipa version, bundle ID, layout, Keychain mode, and location |
 | Layout | Select the iPhone or supported iPad layout |
 | Appearance | Follow the system, or force light or dark |
 | Language | Follow the system, or force one of the app's bundled languages. Shown when the app ships more than one. Applies the next time the app opens |
